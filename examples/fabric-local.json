@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "platform": "windows-x64",
+  "minecraft": "1.20.1",
+  "fabric": "0.16.9",
+  "clientMetadata": "versions/1.20.1/1.20.1.json",
+  "clientJar": "versions/1.20.1/1.20.1.jar",
+  "loaderMetadata": "versions/fabric-loader-0.16.9-1.20.1/fabric-loader-0.16.9-1.20.1.json",
+  "libraries": "libraries",
+  "assets": "assets",
+  "packFiles": []
+}

@@ -1,0 +1,29 @@
+/target/
+/dist/
+/.mcdocker/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Downloaded packs and game output
+*.mrpack
+/packs/
+/instances/
+/store/
+/layers/
+/generations/
+/work/
+/runtimes/
+/removed/
+/verification/
+/store.lock
+/instances.lock
+/selected.json
+
+# Windows and editor artifacts
+Thumbs.db
+Desktop.ini
+*.pdb
+*.rs.bk
