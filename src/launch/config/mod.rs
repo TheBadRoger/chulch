@@ -1,4 +1,4 @@
-use crate::{generation, instance, lock, paths::under};
+use crate::{instances::generation, instances::instance, storage::lock, storage::paths::under};
 mod options;
 use anyhow::{Context, Result, bail, ensure};
 use options::Settings;
@@ -12,7 +12,7 @@ use std::{
 fn open_editor(path: &Path) -> Result<()> {
     let configured = ["VISUAL", "EDITOR"]
         .into_iter()
-        .filter_map(|key| env::var_os(key))
+        .filter_map(env::var_os)
         .find(|value| !value.is_empty());
     if let Some(value) = configured {
         let mut command = if Path::new(&value).is_file() {
@@ -175,7 +175,7 @@ pub fn edit(root: &Path, id: &str) -> Result<PathBuf> {
     }
     open_editor(&draft)?;
 
-    crate::paths::no_link(&draft)?;
+    crate::storage::paths::no_link(&draft)?;
     let validate = || -> Result<()> {
         let settings: Settings = toml_table(&fs::read(&draft)?)?.try_into()?;
         settings.validate()

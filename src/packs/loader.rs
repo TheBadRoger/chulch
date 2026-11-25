@@ -1,4 +1,4 @@
-use crate::paths::component;
+use crate::storage::paths::component;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path, process::Command};
@@ -40,7 +40,7 @@ pub(crate) fn install_client(
     root: &Path,
     base: &Path,
     major: u32,
-    net: &crate::network::Network,
+    net: &crate::packs::network::Network,
 ) -> Result<()> {
     let (repo, artifact, ver) = match loader {
         Loader::Forge => (
@@ -60,7 +60,7 @@ pub(crate) fn install_client(
     let url = format!("{repo}/{artifact}/{ver}/{artifact}-{ver}-installer.jar");
     let installer = base.join("installer.jar");
     net.loader_installer(loader, version, &url, &installer)?;
-    crate::metadata::prepare_installer_libraries(&installer, base, net)?;
+    crate::packs::metadata::prepare_installer_libraries(&installer, base, net)?;
     fs::write(base.join("launcher_profiles.json"), br#"{"profiles":{}}"#)?;
     let java = crate::java::select(root, major, None, true)?;
     let base = std::path::absolute(base)?;
@@ -83,7 +83,8 @@ pub(crate) fn install_client(
     );
     let profile = loader.profile_id(mc, version);
     ensure!(
-        crate::paths::under(&base, &format!("versions/{profile}/{profile}.json"))?.is_file(),
+        crate::storage::paths::under(&base, &format!("versions/{profile}/{profile}.json"))?
+            .is_file(),
         "{} installer did not produce the client profile {profile}",
         loader.name()
     );
@@ -231,7 +232,7 @@ mod tests {
             tmp.path(),
             &base,
             21,
-            &crate::network::Network::new()?,
+            &crate::packs::network::Network::new()?,
         )?;
         let id = Loader::NeoForge.profile_id("1.21.1", version);
         let profile: serde_json::Value =

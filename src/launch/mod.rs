@@ -1,12 +1,14 @@
+pub mod config;
+pub mod java;
+
 use crate::{
     LaunchArguments,
-    config::read_settings,
-    generation, instance, lock, materialize,
-    metadata::{self, Layer, Role},
-    paths::under,
-    store,
+    instances::{generation, install::materialize, instance},
+    packs::metadata::{self, Layer, Role},
+    storage::{lock, paths::under, store},
 };
 use anyhow::{Context, Result, ensure};
+use config::read_settings;
 use std::{
     collections::BTreeSet,
     env, fs,
@@ -17,6 +19,22 @@ use std::{
 pub struct Player {
     pub name: String,
     pub uuid: String,
+}
+
+pub enum LaunchIdentity<'a> {
+    Offline(&'a Player),
+    Microsoft(&'a crate::account::Session),
+}
+
+pub(crate) fn valid_uuid(uuid: &str) -> bool {
+    uuid.len() == 36
+        && uuid.bytes().enumerate().all(|(i, c)| {
+            if matches!(i, 8 | 13 | 18 | 23) {
+                c == b'-'
+            } else {
+                c.is_ascii_hexdigit()
+            }
+        })
 }
 
 pub fn launch(
@@ -66,23 +84,40 @@ pub fn launch_with_args(
     world: Option<&str>,
     extra: &LaunchArguments,
 ) -> Result<ExitStatus> {
+    launch_with_identity(
+        root,
+        id,
+        java,
+        LaunchIdentity::Offline(player),
+        world,
+        extra,
+    )
+}
+
+pub fn launch_with_identity(
+    root: &Path,
+    id: &str,
+    java: Option<&Path>,
+    identity: LaunchIdentity<'_>,
+    world: Option<&str>,
+    extra: &LaunchArguments,
+) -> Result<ExitStatus> {
+    let player = match identity {
+        LaunchIdentity::Offline(p) => p,
+        LaunchIdentity::Microsoft(s) => &s.player,
+    };
     ensure!(
         (1..=16).contains(&player.name.len())
             && player
                 .name
                 .bytes()
                 .all(|c| c.is_ascii_alphanumeric() || c == b'_'),
-        "invalid offline player name"
+        "invalid Minecraft player name"
     );
-    let valid_uuid = player.uuid.len() == 36
-        && player.uuid.bytes().enumerate().all(|(i, c)| {
-            if matches!(i, 8 | 13 | 18 | 23) {
-                c == b'-'
-            } else {
-                c.is_ascii_hexdigit()
-            }
-        });
-    ensure!(valid_uuid, "expected a hyphenated player UUID");
+    ensure!(
+        valid_uuid(&player.uuid),
+        "expected a hyphenated player UUID"
+    );
     let root = std::path::absolute(root)?;
     let instance = instance(&root, id)?;
     let global = lock(&under(&root, "instances.lock")?, true)?;
@@ -109,7 +144,7 @@ pub fn launch_with_args(
                 .unwrap_or(gen_info.minecraft == "1.20.1"),
             "this Minecraft version does not declare singleplayer Quick Play support"
         );
-        crate::paths::component(name)?;
+        crate::storage::paths::component(name)?;
         ensure!(
             under(&game, &format!("saves/{name}/level.dat"))?.is_file(),
             "no saved world named {name:?} in {id}"
@@ -195,7 +230,7 @@ pub fn launch_with_args(
     let args = if gen_info.argument_profile == "modern-v1" {
         gen_info.arguments
     } else {
-        crate::loader::Arguments::offline_defaults()
+        crate::packs::loader::Arguments::offline_defaults()
     };
     let expanded = |args: Vec<String>| args.iter().map(|s| expand(s)).collect::<Result<Vec<_>>>();
     let mut base = LaunchArguments {
@@ -207,7 +242,10 @@ pub fn launch_with_args(
         base.game
             .extend(["--quickPlaySingleplayer".into(), name.into()]);
     }
-    let args = defaults.resolve(base, extra);
+    let mut args = defaults.resolve(base, extra);
+    if let LaunchIdentity::Microsoft(session) = identity {
+        session.set_game_identity(&mut args.game);
+    }
     command
         .args(args.jvm)
         .arg(&gen_info.main_class)

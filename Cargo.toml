@@ -7,6 +7,7 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1"
+base64 = "0.23"
 clap = { version = "4", features = ["derive"] }
 clap_complete = { version = "4", features = ["unstable-dynamic"] }
 ring = "0.17"
@@ -17,3 +18,6 @@ tempfile = "3"
 toml = "1"
 ureq = { version = "3", features = ["json"] }
 zip = { version = "4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-dpapi = "0.2"

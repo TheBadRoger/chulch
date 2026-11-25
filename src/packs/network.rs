@@ -70,7 +70,7 @@ impl Network {
             .next()
             .context("empty installer checksum")?
             .to_ascii_lowercase();
-        crate::paths::hash_id(&hash, 40)?;
+        crate::storage::paths::hash_id(&hash, 40)?;
         Ok(hash)
     }
     pub fn curse_file<T: DeserializeOwned>(&self, project: u64, file: u64, key: &str) -> Result<T> {

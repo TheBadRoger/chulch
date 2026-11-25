@@ -1,4 +1,6 @@
-use crate::Cli;
+mod powershell;
+
+use super::Cli;
 use anyhow::{Result, ensure};
 use clap::CommandFactory;
 use clap_complete::{
@@ -10,7 +12,7 @@ use std::{env, io, path::PathBuf};
 pub fn script(shell: Shell) -> Result<()> {
     if shell == Shell::PowerShell {
         use io::Write;
-        io::stdout().write_all(include_bytes!("completion.ps1"))?;
+        io::stdout().write_all(powershell::REGISTER.as_bytes())?;
     } else {
         clap_complete::generate(shell, &mut Cli::command(), "mcdocker", &mut io::stdout());
     }
@@ -33,13 +35,9 @@ fn workspace_option(words: &[String]) -> Option<PathBuf> {
     path
 }
 
-pub fn powershell() -> Result<()> {
-    let words: Vec<String> = serde_json::from_reader(io::stdin().lock())?;
-    serde_json::to_writer(io::stdout().lock(), &candidates(words)?)?;
-    Ok(())
-}
+pub use powershell::complete as powershell;
 
-fn candidates(words: Vec<String>) -> Result<Vec<serde_json::Value>> {
+fn candidates(words: Vec<String>) -> Result<Vec<CompletionCandidate>> {
     ensure!(words.len() >= 2, "Expected command and completion prefix");
     let previous = &words[1..words.len() - 1];
     if previous.iter().any(|s| s == "--") {
@@ -79,16 +77,12 @@ fn candidates(words: Vec<String>) -> Result<Vec<serde_json::Value>> {
         cmd.mut_subcommand("clear", |clear| clear.mut_arg("id", |a| a.add(instances)))
     });
     let index = words.len() - 1;
-    let choices = clap_complete::engine::complete(
+    Ok(clap_complete::engine::complete(
         &mut cli,
         words.into_iter().map(Into::into).collect(),
         index,
         Some(&env::current_dir()?),
-    )?;
-    let rows: Vec<_> = choices.iter().map(|c| serde_json::json!({
-        "value": c.get_value().to_string_lossy(), "help": c.get_help().map(ToString::to_string)
-    })).collect();
-    Ok(rows)
+    )?)
 }
 
 #[cfg(test)]
@@ -102,7 +96,7 @@ mod tests {
         assert!(
             flags
                 .iter()
-                .any(|f| f["value"] == "--jvm-arg" && f["help"].is_string())
+                .any(|f| f.get_value() == "--jvm-arg" && f.get_help().is_some())
         );
         assert!(candidates(words(&["mcdocker", "run", "--", "--jvm"]))?.is_empty());
         Ok(())

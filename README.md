@@ -1,6 +1,6 @@
 # mcdocker
 
-mcdocker 是一个 **Windows x64** 命令行工具，用于安装和启动 Minecraft Java 版的 Fabric、Forge 和 NeoForge 整合包。多个实例可以共享游戏文件，各自保留模组、配置和存档。启动时会自动匹配 Java。
+mcdocker 是一个 **Windows x64** 命令行工具，用于安装和启动 Minecraft Java 版的 Fabric、Forge 和 NeoForge 整合包，支持离线角色和微软正版账号。多个实例可以共享游戏文件，各自保留模组、配置和存档。启动时会自动匹配 Java。
 
 ## 快速启动
 

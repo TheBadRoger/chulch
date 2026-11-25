@@ -1,7 +1,12 @@
 use crate::{
-    metadata::{PackFile, PackRole, Recipe},
-    network::{MAX_FILE, Network, transfer},
-    paths::{component, hash_id, under},
+    instances::{
+        self,
+        install::{install, separate_source},
+    },
+    packs::metadata::{self, Layer, PackFile, PackRole, Recipe},
+    packs::network::{MAX_FILE, Network, transfer},
+    storage::paths::{component, hash_id, under},
+    storage::store,
 };
 use anyhow::{Context, Result, bail, ensure};
 use serde::Deserialize;
@@ -14,7 +19,7 @@ use std::{
 };
 use zip::ZipArchive;
 
-use crate::archive::{MAX_ENTRIES, MAX_TOTAL, index, validate};
+use crate::storage::archive::{MAX_ENTRIES, MAX_TOTAL, index, validate};
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Modrinth {
@@ -417,14 +422,14 @@ pub fn install_pack(
     optional: bool,
 ) -> Result<()> {
     if let Some(dir) = source {
-        crate::separate_source(root, dir)?;
+        separate_source(root, dir)?;
     }
     let archive = File::open(archive).context("open modpack archive")?;
     ensure!(
         archive.metadata()?.len() <= MAX_TOTAL,
         "oversized pack archive"
     );
-    crate::install(root, id, |scratch| {
+    install(root, id, |scratch| {
         let net = Network::new()?;
         let mut input = Input {
             zip: ZipArchive::new(archive)?,
@@ -447,36 +452,34 @@ pub fn install_pack(
         };
         recipe.pack_files = input.files.into_values().collect();
         if let Some(source) = source {
-            return crate::resolve(root, source, scratch, &recipe);
+            return metadata::resolve(root, source, &recipe, scratch);
         }
         for existing in crate::list(root)? {
-            let mut locked = crate::generation(root, &crate::instance(root, &existing)?)?;
+            let mut locked = instances::generation(root, &instances::instance(root, &existing)?)?;
             if locked.minecraft == recipe.minecraft
                 && locked.loader == recipe.loader
                 && locked.loader_version == recipe.loader_version
                 && locked.layers.len() == 3
             {
                 for layer in &locked.layers[..2] {
-                    let layer: crate::metadata::Layer =
-                        crate::store::record(root, "layers", layer)?;
+                    let layer: Layer = store::record(root, "layers", layer)?;
                     for entry in layer.entries {
-                        crate::store::copy_checked(root, &entry.blob, std::io::sink())?;
+                        store::copy_checked(root, &entry.blob, std::io::sink())?;
                     }
                 }
-                locked.layers[2] =
-                    crate::metadata::pack_layer(root, scratch, &recipe, &locked.layers[1])?;
+                locked.layers[2] = metadata::pack_layer(root, scratch, &recipe, &locked.layers[1])?;
                 return Ok(locked);
             }
         }
         if let Some(appdata) = env::var_os("APPDATA") {
             let local = PathBuf::from(appdata).join(".minecraft");
             if recipe.available_in(&local)? {
-                return crate::resolve(root, &local, scratch, &recipe);
+                return metadata::resolve(root, &local, &recipe, scratch);
             }
         }
         let base = scratch.join("base");
         fs::create_dir(&base)?;
         recipe.download_base(root, &base, &net)?;
-        crate::resolve(root, &base, scratch, &recipe)
+        metadata::resolve(root, &base, &recipe, scratch)
     })
 }

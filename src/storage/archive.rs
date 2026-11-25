@@ -1,4 +1,4 @@
-use crate::{network::MAX_FILE, paths::component};
+use crate::{packs::network::MAX_FILE, storage::paths::component};
 use anyhow::{Context, Result, ensure};
 use std::{
     collections::{BTreeMap, BTreeSet},

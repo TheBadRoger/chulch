@@ -1,9 +1,9 @@
 //! Import a local launcher installation without changing its game directory.
 use crate::{
     Loader,
-    metadata::{self, PackFile, PackRole, Recipe},
-    network::Network,
-    paths::{component, hash_id, under},
+    packs::metadata::{self, PackFile, PackRole, Recipe},
+    packs::network::Network,
+    storage::paths::{component, hash_id, under},
 };
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
@@ -298,7 +298,7 @@ pub fn discover(root: &Path) -> Result<(Vec<Client>, Vec<String>)> {
             && absolute.is_dir(),
         "specify an existing .minecraft root directory"
     );
-    crate::paths::no_link(&absolute)?;
+    crate::storage::paths::no_link(&absolute)?;
     let versions = under(&absolute, "versions")?;
     let mut inputs = BTreeMap::new();
     let mut warnings = vec![];
@@ -486,7 +486,7 @@ fn collect(game: &Path, name: &str, files: &mut Vec<String>, dirs: &mut Vec<Stri
 
 pub fn valid_new_id(root: &Path, id: &str) -> Result<()> {
     ensure!(
-        !crate::instance(root, id)?.try_exists()?,
+        !crate::instances::instance(root, id)?.try_exists()?,
         "instance {id} already exists"
     );
     Ok(())
@@ -500,7 +500,7 @@ pub fn import(
     options: &Options,
     confirm: impl Fn(&str) -> Result<bool>,
 ) -> Result<()> {
-    crate::separate_source(root, &client.root)?;
+    crate::instances::install::separate_source(root, &client.root)?;
     let game = client
         .data_dirs
         .get(data_index)
@@ -540,7 +540,7 @@ pub fn import(
             collect(game, dir, &mut private, &mut dirs)?;
         }
     }
-    crate::install_with_private(
+    crate::instances::install::install_with_private(
         root,
         id,
         |scratch| {

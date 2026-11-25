@@ -1,4 +1,10 @@
-use crate::{Version, generation, instance, lock, paths::under};
+pub mod maintenance;
+pub mod resources;
+
+use crate::{
+    instances::generation, instances::instance, instances::model::Version, storage::lock,
+    storage::paths::under,
+};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -57,7 +63,7 @@ pub fn resolve(explicit: Option<PathBuf>) -> Result<PathBuf> {
 
 pub fn set_default(path: &Path) -> Result<PathBuf> {
     let workspace = std::path::absolute(path)?;
-    crate::paths::no_link(&workspace)?;
+    crate::storage::paths::no_link(&workspace)?;
     fs::create_dir_all(&workspace)?;
     let config = config_dir()?.join("settings.json");
     if config.try_exists()? {

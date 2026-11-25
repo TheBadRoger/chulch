@@ -147,7 +147,8 @@ pub fn select(root: &Path, major: u32, explicit: Option<&Path>, acquire: bool) -
     }
     let mut seen = HashSet::new();
     let mut best: Option<Java> = None;
-    let cached = crate::paths::under(root, &format!("runtimes/java-{major}/bin/java.exe"))?;
+    let cached =
+        crate::storage::paths::under(root, &format!("runtimes/java-{major}/bin/java.exe"))?;
     for path in candidates().into_iter().chain([cached.clone()]) {
         if !path.is_file() || !seen.insert(path.canonicalize().unwrap_or_else(|_| path.clone())) {
             continue;
@@ -164,9 +165,10 @@ pub fn select(root: &Path, major: u32, explicit: Option<&Path>, acquire: bool) -
         return Ok(found);
     }
     if acquire {
-        let dir = crate::paths::under(root, "runtimes")?;
+        let dir = crate::storage::paths::under(root, "runtimes")?;
         fs::create_dir_all(&dir)?;
-        let _lock = crate::lock(&crate::paths::under(&dir, "install.lock")?, true)?;
+        let _lock =
+            crate::storage::lock(&crate::storage::paths::under(&dir, "install.lock")?, true)?;
         if !cached.try_exists()? {
             install_jre(&dir, major)?;
         }
@@ -177,9 +179,9 @@ pub fn select(root: &Path, major: u32, explicit: Option<&Path>, acquire: bool) -
 
 fn install_jre(runtimes: &Path, major: u32) -> Result<()> {
     use crate::{
-        archive,
-        network::{Network, transfer},
-        paths::{hash_id, under},
+        packs::network::{Network, transfer},
+        storage::archive,
+        storage::paths::{hash_id, under},
     };
     use serde::Deserialize;
     #[derive(Deserialize)]
@@ -229,7 +231,7 @@ fn install_jre(runtimes: &Path, major: u32) -> Result<()> {
     urls.push(package.link.clone());
     net.download_checked(&urls, &zip_path, Some(package.size), None, None, |file| {
         ensure!(
-            crate::store::fingerprint(file)?.sha256 == package.checksum,
+            crate::storage::store::fingerprint(file)?.sha256 == package.checksum,
             "Temurin package SHA-256 mismatch"
         );
         Ok(())

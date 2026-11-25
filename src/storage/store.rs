@@ -1,4 +1,4 @@
-use crate::paths::{hash_id, under};
+use crate::storage::paths::{hash_id, under};
 use anyhow::{Context, Result, ensure};
 use ring::digest::{self, SHA1_FOR_LEGACY_USE_ONLY, SHA256};
 use serde::{Deserialize, Serialize};

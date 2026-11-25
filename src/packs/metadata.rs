@@ -1,8 +1,10 @@
 use crate::{
-    Generation, Loader, Version,
-    loader::{Arguments, coordinate_path as maven_path},
-    paths::{component, hash_id, under},
-    store::{self, Blob},
+    Loader,
+    instances::model::Generation,
+    instances::model::Version,
+    packs::loader::{Arguments, coordinate_path as maven_path},
+    storage::paths::{component, hash_id, under},
+    storage::store::{self, Blob},
 };
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -552,7 +554,7 @@ fn resolve_profiles(
         } else {
             &loader_game
         };
-        for name in crate::loader::runtime_artifacts(
+        for name in crate::packs::loader::runtime_artifacts(
             recipe.loader,
             &mc.id,
             &recipe.loader_version,
@@ -662,7 +664,7 @@ pub(crate) fn pack_layer(
 pub(crate) fn prepare_installer_libraries(
     installer: &Path,
     base: &Path,
-    net: &crate::network::Network,
+    net: &crate::packs::network::Network,
 ) -> Result<()> {
     use std::io::Read;
     #[derive(Deserialize)]
@@ -710,7 +712,7 @@ pub(crate) fn prepare_installer_libraries(
         }
     }
     let files: Vec<_> = files.into_iter().collect();
-    crate::network::parallel(&files, |(path, (url, size, sha1))| {
+    crate::packs::network::parallel(&files, |(path, (url, size, sha1))| {
         net.game_file(url, path, Some(*size), Some(sha1))
     })
 }
@@ -738,7 +740,7 @@ impl Recipe {
         &self,
         root: &Path,
         base: &Path,
-        net: &crate::network::Network,
+        net: &crate::packs::network::Network,
     ) -> Result<()> {
         let path = under(base, &self.client_metadata)?;
         download_mojang_profile(&self.minecraft, &path, net)?;
@@ -779,7 +781,7 @@ impl Recipe {
                 )?,
             ));
         }
-        crate::network::parallel(&downloads, |(artifact, path)| fetch(artifact, path))?;
+        crate::packs::network::parallel(&downloads, |(artifact, path)| fetch(artifact, path))?;
         if self.loader == Loader::Fabric {
             let url = format!(
                 "https://meta.fabricmc.net/v2/versions/loader/{}/{}/profile/json",
@@ -824,7 +826,7 @@ impl Recipe {
                 }
             }
         } else if self.loader != Loader::Vanilla {
-            crate::loader::install_client(
+            crate::packs::loader::install_client(
                 self.loader,
                 &mc.id,
                 &self.loader_version,
@@ -853,7 +855,7 @@ impl Recipe {
         }
         let objects: Vec<_> = objects.into_iter().collect();
         eprintln!("Downloading {} Minecraft asset objects", objects.len());
-        crate::network::parallel(&objects, |(hash, size)| {
+        crate::packs::network::parallel(&objects, |(hash, size)| {
             let rel = format!("{}/{hash}", &hash[..2]);
             net.game_file(
                 &format!("https://resources.download.minecraft.net/{rel}"),
@@ -894,7 +896,7 @@ impl Recipe {
 pub(crate) fn download_mojang_profile(
     minecraft: &str,
     path: &Path,
-    net: &crate::network::Network,
+    net: &crate::packs::network::Network,
 ) -> Result<()> {
     #[derive(Deserialize)]
     struct Versions {

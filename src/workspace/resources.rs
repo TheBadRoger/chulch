@@ -1,7 +1,7 @@
 use crate::{
-    Version,
-    paths::{no_link, under},
-    store,
+    instances::model::Version,
+    storage::paths::{no_link, under},
+    storage::store,
     workspace::{config_dir, write_json},
 };
 use anyhow::{Context, Result, ensure};
@@ -137,7 +137,7 @@ fn cleanup(instance: &Path) -> Result<()> {
             "invalid shared pack category"
         );
         let parent = under(instance, &format!("game/{}", pack.kind))?;
-        crate::paths::component(&pack.name)?;
+        crate::storage::paths::component(&pack.name)?;
         let target = parent.join(pack.name);
         if !target.try_exists()? {
             continue;
@@ -232,7 +232,7 @@ fn prepare(instance: &Path, stage: &Path, pool: &Path) -> Result<()> {
                 .file_name()
                 .into_string()
                 .map_err(|_| anyhow::anyhow!("invalid shared pack filename"))?;
-            crate::paths::component(&name)?;
+            crate::storage::paths::component(&name)?;
             let name = pack_name(
                 &name,
                 entry.file_type()?.is_file(),

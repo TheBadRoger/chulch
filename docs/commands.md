@@ -16,13 +16,15 @@
 | 安装整合包 | `mcdocker install '.\my-pack.mrpack' --id survival` |
 | 查看匹配的 Java | `mcdocker java survival` |
 | 启动实例 | `mcdocker launch survival`（别名 `run`） |
+| 登录微软账号、查看上次认证的角色 | `mcdocker account login --client-id <应用 ID>`、`mcdocker account status` |
+| 使用已认证的微软账号启动 | `mcdocker launch survival --account microsoft` |
 | 为所有实例设置公共资源区 | `mcdocker resources use 'E:\Minecraft 公共包'` |
 | 直接进入已有存档 | `mcdocker quick survival 'New World'` |
 | 卸载实例并保留数据 | `mcdocker uninstall survival` |
 
 ## 命令补全与提示
 
-在 PowerShell 中运行以下命令即可为当前会话注册补全。若希望每次打开终端时启用，把同一行加入 PowerShell 的 `$PROFILE`。
+在 PowerShell 中运行以下命令即可为当前会话启用补全。注册所需的内容由 `mcdocker` 直接生成。若希望每次打开终端时启用，把同一行加入 PowerShell 的 `$PROFILE`。
 
 ```powershell
 mcdocker completions powershell | Out-String | Invoke-Expression
@@ -32,6 +34,7 @@ mcdocker completions powershell | Out-String | Invoke-Expression
 | --- | --- |
 | `mcdocker lau` | `launch` 子命令 |
 | `mcdocker launch --jv` | `--jvm-arg` 选项 |
+| `mcdocker launch --account mi` | `microsoft` 登录方式 |
 | `mcdocker --workspace 'E:\minecraftgames' config at` | 该工作区匹配的实例，例如 `atm9` |
 
 使用 PSReadLine 默认快捷键 **Ctrl+Space** 可列出候选并查看说明。`mcdocker <命令> --help` 显示该命令的参数；拼错命令时，程序会提示相近的名称。`mcdocker completions` 也可为 Bash、Zsh、Fish 和 Elvish 生成子命令与选项的补全脚本。
@@ -173,6 +176,27 @@ mcdocker install '.\examples\fabric-local.json' --source 'E:\Games\.minecraft' -
 导入器只读源目录，按 Windows x64 选择库，校验并保存所需文件。缺件时可补齐后用同一实例名重试。安装完成后可移走源目录。旧命令 `mcdocker instance import <实例名> <清单> --source <目录>` 和 `mcdocker instance list` 仍可使用。
 
 ## Java 与游戏启动
+
+### 离线或微软正版账号
+
+默认采用离线模式。普通启动、`run` 别名和快速读档都支持 `--account offline` 或 `--account microsoft`。
+
+```powershell
+# Offline (the default)
+mcdocker launch survival --account offline --player Alex
+
+# Sign in once with the public application ID supplied by the launcher operator
+mcdocker account login --client-id <应用的客户端ID>
+mcdocker account status
+mcdocker launch survival --account microsoft
+mcdocker quick survival 'New World' --account microsoft
+```
+
+首次登录时，终端会显示微软验证网址和一次性代码。打开网址、输入代码，并确认页面显示的是预期的应用。登录成功后，终端会显示已验证的 Minecraft Java 角色名。正版模式使用该角色名和 UUID，`--player` 与 `--uuid` 仅供离线模式使用。[微软设备代码登录说明](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code)
+
+**客户端 ID 从哪里来？** 启动器维护者在 Microsoft Entra 注册支持个人 Microsoft 账号的应用，启用公共客户端的设备代码登录，在应用的“概述”页复制 **Application (client) ID**，并为这个 ID 申请 Minecraft Java 游戏服务访问权限。这个公开编号可分发给玩家，同一启动器的玩家可以共用。每位玩家仍在微软网站授权自己的账号。mcdocker 支持在登录时传入 ID，也会读取环境变量 `MCDOCKER_MICROSOFT_CLIENT_ID`。[微软应用注册指南](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) · [Minecraft 应用审核申请](https://aka.ms/mce-reviewappid)
+
+**账号保存与切换。** mcdocker 为当前 Windows 用户保存一个已认证账号，供各工作区使用。刷新凭据由 Windows DPAPI 加密。每次选择正版启动时，mcdocker 会联网刷新授权、检查 Java 版权益并读取角色；认证失败会终止本次启动。再次登录成功会替换本地账号。使用 `mcdocker account logout` 删除本地登录信息，或在单次启动时选择 `--account offline` 并保留登录信息。
 
 ```powershell
 mcdocker java survival
