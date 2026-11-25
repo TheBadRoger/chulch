@@ -33,6 +33,144 @@ fn identity(contents: &[u8]) -> Value {
 }
 
 #[test]
+fn installed_import_selects_clients_and_keeps_worlds_private() -> Result<()> {
+    use std::process::Stdio;
+    let f = Fixture::new()?;
+    let source = f.source.join(".minecraft");
+    let mut vanilla: Value = serde_json::from_slice(&fs::read(f.source.join("vanilla.json"))?)?;
+    vanilla["mainClass"] = json!("net.minecraft.client.main.Main");
+    write(
+        &source,
+        "versions/base/base.json",
+        &serde_json::to_vec(&vanilla)?,
+    )?;
+    write(&source, "versions/base/base.jar", b"client")?;
+    let mut fabric: Value = serde_json::from_slice(&fs::read(f.source.join("fabric.json"))?)?;
+    fabric["inheritsFrom"] = json!("base");
+    write(
+        &source,
+        "versions/中文包/中文包.json",
+        &serde_json::to_vec(&fabric)?,
+    )?;
+    write(&source, "assets/indexes/5.json", br#"{"objects":{}}"#)?;
+    let library = "libraries/net/fabricmc/fabric-loader/0.16.9/fabric-loader-0.16.9.jar";
+    write(&source.join("versions/中文包"), library, b"loader")?;
+    write(&source, "mods/root.jar", b"root")?;
+    let isolated = source.join("versions/中文包");
+    fs::create_dir_all(isolated.join("defaultconfigs/empty"))?;
+    for (path, data) in [
+        ("mods/mod.jar", "mod"),
+        ("mods/old.jar.disabled", "off"),
+        ("saves/World/level.dat", "save"),
+        ("saves/Cache/level.dat", "another world"),
+        ("config/a.json", "config"),
+        ("options.txt", "options"),
+        ("resourcepacks/pack.zip", "rp"),
+        ("shaderpacks/shader.zip", "shader"),
+        ("patchouli_books/b/book.json", "book"),
+        ("fancymenu_data/menu.json", "menu"),
+        ("schematics/file", "skip"),
+        ("PCL/key", "private"),
+        ("logs/latest.log", "log"),
+    ] {
+        write(&isolated, path, data.as_bytes())?;
+    }
+    // Select all versions, skip extras for vanilla, choose isolated data and a new ID for Fabric.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_mcdocker"))
+        .arg("--workspace")
+        .arg(&f.root)
+        .arg("import")
+        .arg(&source)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"all\n\n1\ncustom\n1,3\n")?;
+    let output = child.wait_with_output()?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        mcdocker::info(&f.root, "base")?.loader,
+        mcdocker::Loader::Vanilla
+    );
+    let dir = f.root.join("instances/custom/game");
+    assert!(dir.join("defaultconfigs/empty").is_dir());
+    for path in [
+        "mods/mod.jar",
+        "saves/World/level.dat",
+        "saves/Cache/level.dat",
+        "resourcepacks/pack.zip",
+        "patchouli_books/b/book.json",
+        "fancymenu_data/menu.json",
+    ] {
+        assert!(dir.join(path).is_file(), "{path}");
+    }
+    for path in [
+        "mods/root.jar",
+        "mods/old.jar.disabled",
+        "config",
+        "options.txt",
+        "shaderpacks",
+        "schematics",
+        "PCL",
+        "logs",
+    ] {
+        assert!(!dir.join(path).exists(), "{path}");
+    }
+    fs::write(dir.join("saves/World/level.dat"), b"changed")?;
+    assert_eq!(fs::read(isolated.join("saves/World/level.dat"))?, b"save");
+    assert!(f.blobs()?.iter().all(|p| fs::read(p).unwrap() != b"save"));
+    assert!(mcdocker::installed::discover(&f.source).is_err());
+    Ok(())
+}
+
+#[test]
+fn import_flat_client_asks_before_downloading_and_keeps_source_intact() -> Result<()> {
+    let f = Fixture::new()?;
+    let source = f.source.join(".minecraft");
+    let mut vanilla: Value = serde_json::from_slice(&fs::read(f.source.join("vanilla.json"))?)?;
+    vanilla["mainClass"] = json!("net.minecraft.client.main.Main");
+    vanilla["assetIndex"]["url"] = json!("https://piston-meta.mojang.com/an-index");
+    write(&source, "base.json", &serde_json::to_vec(&vanilla)?)?;
+    write(&source, "base.jar", b"client")?;
+    let (clients, warnings) = mcdocker::installed::discover(&source)?;
+    assert!(warnings.is_empty());
+    let asked = std::cell::RefCell::new(Vec::new());
+    let res = mcdocker::installed::import(
+        &f.root,
+        &clients[0],
+        "check",
+        0,
+        &Default::default(),
+        |file| {
+            asked.borrow_mut().push(file.to_owned());
+            Ok(false)
+        },
+    );
+    assert!(res.is_err());
+    assert_eq!(*asked.borrow(), ["assets/indexes/5.json"]);
+    assert!(!source.join("assets").exists());
+    assert!(mcdocker::list(&f.root)?.is_empty());
+    write(&source, "assets/indexes/5.json", br#"{"objects":{}}"#)?;
+    mcdocker::installed::import(
+        &f.root,
+        &clients[0],
+        "check",
+        0,
+        &Default::default(),
+        |_| panic!("unexpected download"),
+    )?;
+    Ok(())
+}
+
+#[test]
 fn bootstrap_import_requires_generated_minecraft_classes() -> Result<()> {
     let mut f = Fixture::new()?;
     f.recipe.as_object_mut().unwrap().remove("fabric");
@@ -152,6 +290,9 @@ public class KnotClient {
             throw new AssertionError("shared packs in game directory");
         if (Arrays.asList(args).contains("--quickPlaySingleplayer") != Files.exists(Path.of("saves/World")))
             throw new AssertionError("quick play arguments");
+        Files.writeString(Path.of("observed-jvm.txt"), System.getProperty("fixture.jvm", ""));
+        Files.write(Path.of("jvm-options.txt"), java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments());
+        Files.write(Path.of("observed-game.txt"), Arrays.asList(args));
     }
 }"#,
     )?;
@@ -206,10 +347,95 @@ public class KnotClient {
     write(&pool, "resourcepacks/Test.zip", b"test")?;
     write(&pool, "shaderpacks/Sky/shaders/basic.fsh", b"shader")?;
     let java = java.to_str().unwrap();
-    run(&a.root, &["launch", "first", "--java", java], true)?;
-    run(&b.root, &["quick", "second", "World", "--java", java], true)?;
+    write(
+        &a.root,
+        "instances/first/launch-args.toml",
+        br#"[jvm]
+max_memory = "256M"
+extra = ["-Dfixture.jvm=saved","-Xmx512M"]
+[game]
+width = 1280
+fullscreen = false
+extra = ["--width=800", "--fullscreen", "--label", "saved value"]
+"#,
+    )?;
+    run(
+        &a.root,
+        &[
+            "launch",
+            "first",
+            "--java",
+            java,
+            "--jvm-arg=-Dfixture.jvm=one shot",
+            "--jvm-arg=-XX:MaxHeapSize=768M",
+            "--",
+            "--width",
+            "640",
+            "--test",
+            "two words",
+        ],
+        true,
+    )?;
+    let first = a.root.join("instances/first/game");
+    assert_eq!(
+        fs::read_to_string(first.join("observed-jvm.txt"))?,
+        "one shot"
+    );
+    let args = fs::read_to_string(first.join("observed-game.txt"))?;
+    assert_eq!(args.lines().filter(|a| *a == "--width").count(), 1);
+    assert!(
+        args.lines()
+            .collect::<Vec<_>>()
+            .windows(2)
+            .any(|p| p == ["--width", "1280"])
+    );
+    assert!(
+        !args
+            .lines()
+            .any(|a| matches!(a, "640" | "--width=800" | "--fullscreen"))
+    );
+    let jvm = fs::read_to_string(first.join("jvm-options.txt"))?;
+    assert_eq!(
+        jvm.lines()
+            .filter(|s| s.starts_with("-Xmx") || s.starts_with("-XX:MaxHeapSize="))
+            .collect::<Vec<_>>(),
+        ["-Xmx256M"]
+    );
+    assert!(args.lines().collect::<Vec<_>>().ends_with(&[
+        "--label",
+        "saved value",
+        "--test",
+        "two words"
+    ]));
+    run(
+        &b.root,
+        &[
+            "quick",
+            "second",
+            "World",
+            "--java",
+            java,
+            "--jvm-arg=-Dfixture.jvm=quick",
+            "--",
+            "--quick-test",
+        ],
+        true,
+    )?;
+    let second = b.root.join("instances/second/game");
+    assert_eq!(
+        fs::read_to_string(second.join("observed-jvm.txt"))?,
+        "quick"
+    );
+    assert!(
+        fs::read_to_string(second.join("observed-game.txt"))?
+            .lines()
+            .collect::<Vec<_>>()
+            .ends_with(&["--quickPlaySingleplayer", "World", "--quick-test"])
+    );
     run(&b.root, &["resources", "clear"], false)?;
     run(&a.root, &["launch", "first", "--java", java], false)?;
+    assert_eq!(fs::read_to_string(first.join("observed-jvm.txt"))?, "saved");
+    assert!(!fs::read_to_string(first.join("observed-game.txt"))?.contains("two words"));
     assert!(pool.join("resourcepacks/Test.zip").is_file());
     Ok(())
 }
@@ -485,11 +711,26 @@ fn pack_zip(
 fn terminal_workflow_with_persistent_workspace_and_two_archive_formats() -> Result<()> {
     let mut f = Fixture::new()?;
     let appdata = f._dir.path().join("settings");
+    let (script, editor, body) = if cfg!(windows) {
+        (
+            "editor.cmd",
+            "cmd /D /C editor.cmd",
+            " @copy /Y \"%~1\" opened.json >nul\r\n @copy /Y next.json \"%~1\" >nul\r\n",
+        )
+    } else {
+        (
+            "editor.sh",
+            "sh editor.sh",
+            "cp \"$1\" opened.json && cp next.json \"$1\"\n",
+        )
+    };
+    write(f._dir.path(), script, body.as_bytes())?;
     let cli = |args: &[&str]| -> Result<String> {
         let out = Command::new(env!("CARGO_BIN_EXE_mcdocker"))
             .args(args)
             .current_dir(f._dir.path())
             .env("APPDATA", &appdata)
+            .env("VISUAL", editor)
             .env_remove("MCDOCKER_WORKSPACE")
             .env_remove("MCDOCKER_SOURCE")
             .env_remove("CURSEFORGE_API_KEY")
@@ -560,6 +801,52 @@ fn terminal_workflow_with_persistent_workspace_and_two_archive_formats() -> Resu
         ["base", "one", "two"]
     );
     cli(&["use", "two"])?;
+    let table = cli(&["ls", "-l"])?;
+    assert!(table.lines().next().unwrap().contains("LOADER VERSION"));
+    assert!(
+        table
+            .lines()
+            .any(|row| row.split_whitespace().collect::<Vec<_>>()
+                == ["two", "1.20.1", "Fabric", "0.16.9", "21", "0"])
+    );
+    let legacy = br#"{"jvm":["-Xmx2G"],"game":[]}"#;
+    write(&f.root, "instances/two/launch-args.json", legacy)?;
+    assert_eq!(mcdocker::saved_args(&f.root, "two")?.jvm, ["-Xmx2G"]);
+    let saved = f.root.join("instances/two/launch-args.toml");
+    let settings = b"[jvm]\nmax_memory = '3G'\n[game]\n# window size\nwidth = 1280\n";
+    write(f._dir.path(), "next.json", settings)?;
+    cli(&["config"])?;
+    assert_eq!(fs::read(&saved)?, settings);
+    let opened: toml::Table =
+        toml::from_str(&fs::read_to_string(f._dir.path().join("opened.json"))?)?;
+    assert_eq!(opened["jvm"]["extra"][0].as_str(), Some("-Xmx2G"));
+    write(f._dir.path(), "next.json", b"[game]\nwidth = -1")?;
+    assert!(
+        cli(&["config", "two"])
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid launch configuration")
+    );
+    assert_eq!(fs::read(f._dir.path().join("opened.json"))?, settings);
+    assert_eq!(fs::read(&saved)?, settings);
+    fs::write(&saved, b"jvm = ['-Xms64M']\ngame = ['--width','800']\n")?;
+    assert_eq!(
+        mcdocker::saved_args(&f.root, "two")?.game,
+        ["--width", "800"]
+    );
+    write(f._dir.path(), "next.json", settings)?;
+    cli(&["config", "two"])?;
+    for removed in ["set", "show"] {
+        assert!(
+            cli(&["args", removed])
+                .unwrap_err()
+                .to_string()
+                .contains("unrecognized subcommand")
+        );
+    }
+    cli(&["args", "clear"])?;
+    let cleared = mcdocker::saved_args(&f.root, "two")?;
+    assert!(cleared.jvm.is_empty() && cleared.game.is_empty());
     assert!(
         cli(&["quick", "Missing"])
             .unwrap_err()

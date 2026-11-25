@@ -6,6 +6,9 @@
 | --- | --- |
 | 设置默认工作区 | `mcdocker workspace use 'D:\Games\MCWorkspace'` |
 | 查看实例列表 | `mcdocker list`（别名 `ls`） |
+| 按表格查看实例版本、Java 要求和存档数 | `mcdocker list -l`（也可用 `--long` 或 `--details`） |
+| 查看或编辑实例默认启动参数 | `mcdocker config survival` |
+| 导入已经安装好的整合包 | `mcdocker import 'D:\Games\.minecraft'` |
 | 检查共享文件是否缺失或损坏 | `mcdocker verify` |
 | 查看共享对象、各实例私有数据和运行副本的大小 | `mcdocker usage` |
 | 选中常用实例 | `mcdocker use survival` |
@@ -16,6 +19,22 @@
 | 为所有实例设置公共资源区 | `mcdocker resources use 'E:\Minecraft 公共包'` |
 | 直接进入已有存档 | `mcdocker quick survival 'New World'` |
 | 卸载实例并保留数据 | `mcdocker uninstall survival` |
+
+## 命令补全与提示
+
+在 PowerShell 中运行以下命令即可为当前会话注册补全。若希望每次打开终端时启用，把同一行加入 PowerShell 的 `$PROFILE`。
+
+```powershell
+mcdocker completions powershell | Out-String | Invoke-Expression
+```
+
+| 输入后按 Tab | 补全内容 |
+| --- | --- |
+| `mcdocker lau` | `launch` 子命令 |
+| `mcdocker launch --jv` | `--jvm-arg` 选项 |
+| `mcdocker --workspace 'E:\minecraftgames' config at` | 该工作区匹配的实例，例如 `atm9` |
+
+使用 PSReadLine 默认快捷键 **Ctrl+Space** 可列出候选并查看说明。`mcdocker <命令> --help` 显示该命令的参数；拼错命令时，程序会提示相近的名称。`mcdocker completions` 也可为 Bash、Zsh、Fish 和 Elvish 生成子命令与选项的补全脚本。
 
 ## 工作区与当前实例
 
@@ -63,6 +82,32 @@ mcdocker resources show
 要切换公共资源区，再次运行 `resources use <目录>`。运行 `mcdocker resources clear` 可解除共享，原目录和里面的包都会保留。
 
 ## 安装整合包
+
+### 从已有的 .minecraft 导入
+
+先关闭源客户端，特别是要复制的存档。把**名为 `.minecraft` 的根目录**传给 `import`。例如，PCL 把游戏装在 `D:\Games\PCL\.minecraft` 时，可执行：
+
+```powershell
+mcdocker --workspace 'E:\minecraftgames' import 'D:\Games\PCL\.minecraft'
+```
+
+1. **选择版本。** 只有一个客户端时自动选中；有多个时，控制台列出 MC 版本、加载器和数据目录。输入 `2`、`1,3` 或 `all`。每个版本生成一个实例。
+2. **确认数据目录和实例名。** 支持根目录共用游戏数据，也支持 `versions/<版本目录>/` 内的隔离数据。两处都有数据时选择其中一处。实例 ID 默认取版本目录名并转为小写；中文名、不符合命名规则或与现有实例重名时会提示另取 ID。
+3. **选择可选内容。** 输入 `1,2` 可带走存档和配置，`all` 可全选，直接回车可全部跳过。所选内容只复制到新实例。
+
+| 内容 | 导入范围 |
+| --- | --- |
+| 自动导入 | 当前版本需要的客户端、库和资源；`mods/` 顶层启用的 JAR；`kubejs/`、`scripts/`、`defaultconfigs/`、`patchouli_books/`、`fancymenu_data/` |
+| 1 · 存档 | `saves/` 中的世界 |
+| 2 · 配置 | `config/` 和 `options.txt` |
+| 3 · 资源包 | 实例私有的 `resourcepacks/` |
+| 4 · 光影包 | 实例私有的 `shaderpacks/` |
+
+其余自定义目录、日志、截图、缓存、启动器账号和自带 Java 会跳过。缺少可校验的游戏文件时会显示路径；输入 `y` 补这一项，`a` 同意本实例后续的可校验下载，回车则取消。下载写入工作区。需要手动补件时，使用原启动器补齐后可重新导入。
+
+输入 `:q` 可离开交互。本次尚在处理的实例只在导入完整后出现；此前成功导入的其他版本会保留。加载器识别覆盖现代原版、Fabric、Forge 和 NeoForge，包括 PCL 使用的合并版本清单。使用旧式原生库分类器的版本暂不支持。
+
+### 从分发包安装
 
 ```powershell
 mcdocker install '.\my-pack.mrpack' --id survival
@@ -143,6 +188,55 @@ mcdocker launch survival --world 'New World'
 - **手动指定。** `launch` 和 `quick` 均接受 `--java <java.exe 路径>`、`--player <离线玩家名>`、`--uuid <玩家 UUID>`。游戏退出后，命令返回 Java 进程的退出码。
 
 快速读档要求游戏版本支持单人 Quick Play。可用 `mcdocker info survival` 查看存档目录名。用 `mcdocker quick survival 'New World'` 可直接进入该世界，等价于上例中的 `launch --world`。
+
+### 临时启动参数
+
+`launch`、`run` 和 `quick` 都接受额外参数。每个 JVM 参数使用一次 `--jvm-arg`，Minecraft 参数统一写在单独的 `--` 后面。含空格的值请加引号。
+
+```powershell
+mcdocker launch survival --jvm-arg=-Xmx4G -- --width 1280 --height 720
+mcdocker quick survival 'New World' --jvm-arg=-Xmx6G -- --fullscreen
+```
+
+### 实例默认启动参数
+
+```powershell
+mcdocker config survival
+```
+
+`config` 打开文本编辑器。选中实例后，也可以直接运行 `mcdocker config`。首次打开时，模板按 `[jvm]` 和 `[game]` 分区，并用注释给出常用键的示例。去掉某行开头的 `#` 即可启用该设置。
+
+```toml
+[jvm]
+min_memory = "1G"
+max_memory = "4G"
+extra = ["-XX:+UseG1GC"]
+
+[game]
+width = 1280
+height = 720
+fullscreen = false
+extra = []
+```
+
+| 配置键 | 启动效果 |
+| --- | --- |
+| `jvm.min_memory`、`jvm.max_memory` | 初始和最大堆内存，对应 `-Xms`、`-Xmx`。使用字符串，可写字节数或加 `K`、`M`、`G` 后缀 |
+| `game.width`、`game.height` | 窗口的宽和高，单位为像素，填写正整数 |
+| `game.fullscreen` | `true` 会传入 `--fullscreen`；`false` 会移除启动参数里的全屏标志。游戏内保存的显示设置仍由 Minecraft 管理 |
+| 各区段的 `extra` | 附加参数数组，每项对应一个参数。选项和值分开写，含空格的单个值放在同一字符串中 |
+
+**已填写的常用键优先。** 例如，设置 `width = 1280` 后，即使 `game.extra` 含有 `"--width", "800"`，或本次命令带有 `--width=640`，客户端也只收到一次 `--width 1280`。若想临时指定宽度，先注释掉 `width`。其余附加参数按原顺序传递。
+
+保存并退出后，mcdocker 校验配置并写入工作区的 `instances/<实例 ID>/launch-args.toml`；下次启动或快速读档时生效。旧版 JSON 和顶层数组 TOML 仍可启动。用 `config` 编辑旧配置时，原有参数按顺序放入对应区段的 `extra`。可按需将常用设置移为键值对。`mcdocker args clear survival` 可清空两组配置。编辑器异常退出或配置无效时，原文件会保留。
+
+**选择编辑器。** 优先使用 `VISUAL`，其次使用 `EDITOR`。两者均未设置时，依次尝试 Vim、Nano 和 Windows 记事本。使用独立窗口的编辑器时，应启用等待窗口关闭的选项。例如，在 PowerShell 中设置：
+
+```powershell
+$env:VISUAL = 'vim'
+mcdocker config survival
+```
+
 
 ## 核验文件与查看空间
 

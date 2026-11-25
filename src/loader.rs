@@ -6,6 +6,7 @@ use std::{fs, path::Path, process::Command};
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Loader {
+    Vanilla,
     #[default]
     Fabric,
     Forge,
@@ -15,6 +16,7 @@ pub enum Loader {
 impl Loader {
     pub fn name(self) -> &'static str {
         match self {
+            Self::Vanilla => "Vanilla",
             Self::Fabric => "Fabric",
             Self::Forge => "Forge",
             Self::NeoForge => "NeoForge",
@@ -23,6 +25,7 @@ impl Loader {
 
     pub(crate) fn profile_id(self, mc: &str, version: &str) -> String {
         match self {
+            Self::Vanilla => mc.to_owned(),
             Self::Fabric => format!("fabric-loader-{version}-{mc}"),
             Self::Forge => format!("{mc}-forge-{version}"),
             Self::NeoForge => format!("neoforge-{version}"),
@@ -50,7 +53,9 @@ pub(crate) fn install_client(
             "neoforge",
             version.to_owned(),
         ),
-        Loader::Fabric => anyhow::bail!("Fabric uses a launcher profile"),
+        Loader::Fabric | Loader::Vanilla => {
+            anyhow::bail!("this client does not use a loader installer")
+        }
     };
     let url = format!("{repo}/{artifact}/{ver}/{artifact}-{ver}-installer.jar");
     let installer = base.join("installer.jar");
@@ -86,7 +91,7 @@ pub(crate) fn install_client(
 }
 
 #[derive(Default, Serialize, Deserialize)]
-pub(crate) struct Arguments {
+pub struct Arguments {
     #[serde(default)]
     pub jvm: Vec<String>,
     #[serde(default)]
@@ -95,7 +100,7 @@ pub(crate) struct Arguments {
 
 impl Arguments {
     // Older generations and minimal local recipes predate Mojang's argument lists.
-    pub fn offline_defaults() -> Self {
+    pub(crate) fn offline_defaults() -> Self {
         let jvm = [
             "-Djava.library.path=${natives_directory}",
             "-Djna.tmpdir=${natives_directory}",
@@ -141,7 +146,7 @@ pub(crate) fn runtime_artifacts(
 ) -> Result<Vec<String>> {
     let mut files = vec![];
     let mapping = match kind {
-        Loader::Fabric => return Ok(files),
+        Loader::Fabric | Loader::Vanilla => return Ok(files),
         Loader::Forge => "--fml.mcpVersion",
         Loader::NeoForge => "--fml.neoFormVersion",
     };
@@ -176,7 +181,7 @@ pub(crate) fn runtime_artifacts(
                 files.push(format!("net.neoforged:neoforge:{version}:{classifier}"));
             }
         }
-        Loader::Fabric => unreachable!(),
+        Loader::Fabric | Loader::Vanilla => unreachable!(),
     }
     Ok(files)
 }

@@ -1,9 +1,11 @@
 mod archive;
+pub mod config;
 mod distribution;
+pub mod installed;
 mod loader;
 pub mod maintenance;
 mod metadata;
-pub use loader::Loader;
+pub use loader::{Arguments as LaunchArguments, Loader};
 mod network;
 pub use distribution::install_pack;
 pub mod java;
@@ -22,7 +24,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub use runtime::{Player, launch, launch_with_java};
+pub use runtime::{Player, launch, launch_with_args, launch_with_java, saved_args, set_saved_args};
 
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(try_from = "u32", into = "u32")]
@@ -138,6 +140,15 @@ fn resolve(root: &Path, source: &Path, pack_source: &Path, recipe: &Recipe) -> R
 }
 
 fn install(root: &Path, id: &str, prepare: impl FnOnce(&Path) -> Result<Generation>) -> Result<()> {
+    install_with_private(root, id, prepare, |_| Ok(()))
+}
+
+fn install_with_private(
+    root: &Path,
+    id: &str,
+    prepare: impl FnOnce(&Path) -> Result<Generation>,
+    private: impl FnOnce(&Path) -> Result<()>,
+) -> Result<()> {
     let dest = instance(root, id)?;
     fs::create_dir_all(root)?;
     let _store_lock = lock(&under(root, "store.lock")?, true)?;
@@ -157,6 +168,7 @@ fn install(root: &Path, id: &str, prepare: impl FnOnce(&Path) -> Result<Generati
     for entry in pack.entries {
         materialize(root, stage.path(), &entry)?;
     }
+    private(&stage.path().join("game"))?;
     let generation = store::publish_json(root, "generations", &current)?;
     let profile = File::create_new(stage.path().join("profile.json"))?;
     serde_json::to_writer(
@@ -221,6 +233,13 @@ pub struct InstanceInfo {
     pub platform: String,
     pub game: PathBuf,
     pub worlds: Vec<String>,
+}
+
+pub fn list_info(root: &Path) -> Result<Vec<InstanceInfo>> {
+    instance_ids(root)?
+        .iter()
+        .map(|id| info(root, id))
+        .collect()
 }
 
 pub fn info(root: &Path, id: &str) -> Result<InstanceInfo> {

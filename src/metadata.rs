@@ -26,7 +26,7 @@ pub(crate) struct Recipe {
     pub loader_version: String,
     pub java_major: Option<u32>,
     client_metadata: String,
-    client_jar: String,
+    pub(crate) client_jar: String,
     loader_metadata: String,
     libraries: String,
     assets: String,
@@ -280,6 +280,7 @@ struct Importer<'a> {
     source: &'a Path,
     files: BTreeSet<String>,
     directories: BTreeMap<String, String>,
+    recovery: Option<&'a crate::installed::Recovery<'a>>,
 }
 
 impl Importer<'_> {
@@ -290,6 +291,7 @@ impl Importer<'_> {
         role: Role,
         sha1: Option<&str>,
         size: Option<u64>,
+        url: Option<&str>,
     ) -> Result<Entry> {
         let mut prefix = String::new();
         let mut parts = target.split('/').peekable();
@@ -313,7 +315,21 @@ impl Importer<'_> {
             "file/directory collision: {target}"
         );
         self.files.insert(prefix);
-        let blob = store::ingest(self.root, &under(self.source, source)?, sha1, size)?;
+        let mut path = under(self.source, source)?;
+        if let Some(recovery) = self.recovery {
+            if recovery.version_dir != self.source
+                && (source.starts_with("libraries/") || source.starts_with("assets/"))
+            {
+                let isolated = under(recovery.version_dir, source)?;
+                if isolated.try_exists()? {
+                    path = isolated;
+                }
+            }
+            if !path.try_exists()? {
+                path = recovery.missing(source, url, sha1, size)?;
+            }
+        }
+        let blob = store::ingest(self.root, &path, sha1, size)?;
         Ok(Entry {
             target,
             role,
@@ -332,6 +348,38 @@ pub(crate) fn resolve(
     recipe: &Recipe,
     pack_source: &Path,
 ) -> Result<Generation> {
+    let mc = read_json(&under(source, &recipe.client_metadata)?)?;
+    let profile = read_json(&recipe.profile_path(source)?)?;
+    resolve_profiles(root, source, recipe, pack_source, (mc, profile), None)
+}
+
+pub(crate) fn resolve_installed(
+    root: &Path,
+    source: &Path,
+    recipe: &Recipe,
+    game: &Path,
+    profiles: (serde_json::Value, serde_json::Value),
+    recovery: &crate::installed::Recovery<'_>,
+) -> Result<Generation> {
+    let (mc, loader) = profiles;
+    resolve_profiles(
+        root,
+        source,
+        recipe,
+        game,
+        (serde_json::from_value(mc)?, serde_json::from_value(loader)?),
+        Some(recovery),
+    )
+}
+
+fn resolve_profiles(
+    root: &Path,
+    source: &Path,
+    recipe: &Recipe,
+    pack_source: &Path,
+    (mc, profile): (Vanilla, LoaderProfile),
+    recovery: Option<&crate::installed::Recovery<'_>>,
+) -> Result<Generation> {
     let Version::V1 = recipe.schema_version;
     ensure!(
         recipe.platform == "windows-x64",
@@ -339,8 +387,6 @@ pub(crate) fn resolve(
     );
     component(&recipe.loader_version)?;
     component(&recipe.minecraft)?;
-    let mc: Vanilla = read_json(&under(source, &recipe.client_metadata)?)?;
-    let profile: LoaderProfile = read_json(&recipe.profile_path(source)?)?;
     ensure!(
         mc.id == recipe.minecraft
             && recipe
@@ -361,6 +407,11 @@ pub(crate) fn resolve(
                     .eq([&loader]),
             "Fabric Loader coordinate does not match recipe"
         );
+    } else if recipe.loader == Loader::Vanilla {
+        ensure!(
+            profile.main_class == "net.minecraft.client.main.Main",
+            "unsupported vanilla main class"
+        );
     } else {
         let expected = recipe.loader.profile_id(&mc.id, &recipe.loader_version);
         let alias = format!("forge-{}", recipe.loader_version);
@@ -376,6 +427,7 @@ pub(crate) fn resolve(
     let mut importer = Importer {
         root,
         source,
+        recovery,
         files: BTreeSet::new(),
         directories: BTreeMap::new(),
     };
@@ -401,6 +453,7 @@ pub(crate) fn resolve(
             Role::Classpath,
             Some(&a.sha1),
             Some(a.size),
+            a.url.as_deref(),
         )?);
     }
     let a = mc.downloads.client;
@@ -410,6 +463,7 @@ pub(crate) fn resolve(
         Role::Classpath,
         Some(&a.sha1),
         Some(a.size),
+        a.url.as_deref(),
     )?);
     let index = mc.asset_index;
     component(&index.id)?;
@@ -420,6 +474,7 @@ pub(crate) fn resolve(
         Role::Asset,
         Some(&index.sha1),
         Some(index.size),
+        index.url.as_deref(),
     )?;
     let assets: AssetIndex = read_json(&store::path(root, &entry.blob)?)?;
     game.entries.push(entry);
@@ -437,6 +492,11 @@ pub(crate) fn resolve(
             Role::Asset,
             Some(&a.hash),
             Some(a.size),
+            Some(&format!(
+                "https://resources.download.minecraft.net/{}/{}",
+                &a.hash[..2],
+                a.hash
+            )),
         )?);
     }
     let game_id = store::publish_json(root, "layers", &game)?;
@@ -452,26 +512,51 @@ pub(crate) fn resolve(
         if !windows_library(&lib)? {
             continue;
         }
+        ensure!(
+            lib.natives
+                .as_ref()
+                .is_none_or(|n| !n.contains_key("windows")),
+            "legacy native classifiers are not supported by this adapter"
+        );
         let a = lib.downloads.as_ref().map(|d| &d.artifact);
         let path = a
             .and_then(|a| a.path.clone())
             .map_or_else(|| maven_path(&lib.name), Ok)?;
         listed.insert(path.clone());
-        loader.entries.push(importer.file(
-            &format!("{}/{path}", recipe.libraries),
-            format!("libraries/{path}"),
-            Role::Classpath,
-            a.map(|a| a.sha1.as_str()).or(lib.sha1.as_deref()),
-            a.map(|a| a.size).or(lib.size),
-        )?);
+        let repository_url = lib
+            .url
+            .as_ref()
+            .map(|repo| format!("{}/{path}", repo.trim_end_matches('/')));
+        loader.entries.push(
+            importer.file(
+                &format!("{}/{path}", recipe.libraries),
+                format!("libraries/{path}"),
+                Role::Classpath,
+                a.map(|a| a.sha1.as_str()).or(lib.sha1.as_deref()),
+                a.map(|a| a.size).or(lib.size),
+                a.and_then(|a| a.url.as_deref())
+                    .or(repository_url.as_deref()),
+            )?,
+        );
     }
     let loader_game = selected_args(&profile.arguments.game)?;
     if profile.main_class == "cpw.mods.bootstraplauncher.BootstrapLauncher" {
+        let base_game = mc
+            .arguments
+            .as_ref()
+            .map(|a| selected_args(&a.game))
+            .transpose()?
+            .unwrap_or_default();
+        let bootstrap_args = if loader_game.is_empty() {
+            &base_game
+        } else {
+            &loader_game
+        };
         for name in crate::loader::runtime_artifacts(
             recipe.loader,
             &mc.id,
             &recipe.loader_version,
-            &loader_game,
+            bootstrap_args,
         )? {
             let path = maven_path(&name)?;
             if listed.insert(path.clone()) {
@@ -479,6 +564,7 @@ pub(crate) fn resolve(
                     &format!("{}/{path}", recipe.libraries),
                     format!("libraries/{path}"),
                     Role::Library,
+                    None,
                     None,
                     None,
                 )?);
@@ -525,6 +611,7 @@ pub(crate) fn pack_layer(
     let mut importer = Importer {
         root,
         source,
+        recovery: None,
         files: BTreeSet::new(),
         directories: BTreeMap::new(),
     };
@@ -558,6 +645,7 @@ pub(crate) fn pack_layer(
             role,
             p.sha1.as_deref(),
             p.size,
+            None,
         )?;
         if let Some(origin) = &p.origin {
             entry.source = origin.clone();
@@ -652,25 +740,8 @@ impl Recipe {
         base: &Path,
         net: &crate::network::Network,
     ) -> Result<()> {
-        #[derive(Deserialize)]
-        struct Versions {
-            versions: Vec<VersionUrl>,
-        }
-        #[derive(Deserialize)]
-        struct VersionUrl {
-            id: String,
-            url: String,
-            sha1: String,
-        }
-        let versions: Versions =
-            net.metadata("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")?;
-        let selected = versions
-            .versions
-            .iter()
-            .find(|v| v.id == self.minecraft)
-            .context("Minecraft version not in Mojang manifest")?;
         let path = under(base, &self.client_metadata)?;
-        net.game_file(&selected.url, &path, None, Some(&selected.sha1))?;
+        download_mojang_profile(&self.minecraft, &path, net)?;
         let mc: Vanilla = read_json(&path)?;
         ensure!(mc.id == self.minecraft, "Mojang version mismatch");
         let fetch = |a: &Artifact, path: &Path| {
@@ -752,7 +823,7 @@ impl Recipe {
                     )?;
                 }
             }
-        } else {
+        } else if self.loader != Loader::Vanilla {
             crate::loader::install_client(
                 self.loader,
                 &mc.id,
@@ -818,4 +889,30 @@ impl Recipe {
             pack_files: vec![],
         })
     }
+}
+
+pub(crate) fn download_mojang_profile(
+    minecraft: &str,
+    path: &Path,
+    net: &crate::network::Network,
+) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Versions {
+        versions: Vec<VersionUrl>,
+    }
+    #[derive(Deserialize)]
+    struct VersionUrl {
+        id: String,
+        url: String,
+        sha1: String,
+    }
+    let versions: Versions =
+        net.metadata("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json")?;
+    let selected = versions
+        .versions
+        .iter()
+        .find(|v| v.id == minecraft)
+        .context("Minecraft version not in Mojang manifest")?;
+
+    net.game_file(&selected.url, path, None, Some(&selected.sha1))
 }

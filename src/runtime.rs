@@ -1,4 +1,6 @@
 use crate::{
+    LaunchArguments,
+    config::read_settings,
     generation, instance, lock, materialize,
     metadata::{self, Layer, Role},
     paths::under,
@@ -34,6 +36,36 @@ pub fn launch_with_java(
     player: &Player,
     world: Option<&str>,
 ) -> Result<ExitStatus> {
+    launch_with_args(root, id, java, player, world, &LaunchArguments::default())
+}
+
+pub fn saved_args(root: &Path, id: &str) -> Result<LaunchArguments> {
+    let dir = instance(root, id)?;
+    generation(root, &dir)?;
+    Ok(read_settings(&dir)?.resolve(LaunchArguments::default(), &LaunchArguments::default()))
+}
+
+/// Replace the specified groups, preserving the other group's most recent value.
+pub fn set_saved_args(
+    root: &Path,
+    id: &str,
+    jvm: Option<Vec<String>>,
+    game: Option<Vec<String>>,
+) -> Result<()> {
+    let _global = lock(&under(root, "instances.lock")?, true)?;
+    let dir = instance(root, id)?;
+    generation(root, &dir)?;
+    crate::config::replace_groups(&dir, jvm, game)
+}
+
+pub fn launch_with_args(
+    root: &Path,
+    id: &str,
+    java: Option<&Path>,
+    player: &Player,
+    world: Option<&str>,
+    extra: &LaunchArguments,
+) -> Result<ExitStatus> {
     ensure!(
         (1..=16).contains(&player.name.len())
             && player
@@ -55,6 +87,7 @@ pub fn launch_with_java(
     let instance = instance(&root, id)?;
     let global = lock(&under(&root, "instances.lock")?, true)?;
     let _running = lock(&under(&instance, "run.lock")?, false)?;
+    let defaults = read_settings(&instance)?;
     drop(global);
     let gen_info = generation(&root, &instance)?;
     let supported = match gen_info.argument_profile.as_str() {
@@ -123,7 +156,7 @@ pub fn launch_with_java(
         }
     }
     let mut command = Command::new(java.executable);
-    command.current_dir(&game).arg("-Xmx2G");
+    command.current_dir(&game);
     let libraries = view.path().join("libraries");
     let assets = view.path().join("assets");
     let classpath = env::join_paths(classpath)?;
@@ -164,16 +197,21 @@ pub fn launch_with_java(
     } else {
         crate::loader::Arguments::offline_defaults()
     };
-    for arg in args.jvm {
-        command.arg(expand(&arg)?);
-    }
-    command.arg(&gen_info.main_class);
-    for arg in args.game {
-        command.arg(expand(&arg)?);
-    }
+    let expanded = |args: Vec<String>| args.iter().map(|s| expand(s)).collect::<Result<Vec<_>>>();
+    let mut base = LaunchArguments {
+        jvm: expanded(args.jvm)?,
+        game: expanded(args.game)?,
+    };
+    base.jvm.insert(0, "-Xmx2G".into());
     if let Some(name) = world {
-        command.args(["--quickPlaySingleplayer", name]);
+        base.game
+            .extend(["--quickPlaySingleplayer".into(), name.into()]);
     }
+    let args = defaults.resolve(base, extra);
+    command
+        .args(args.jvm)
+        .arg(&gen_info.main_class)
+        .args(args.game);
     crate::resources::with_packs(&instance, view.path(), || {
         command.status().context("start Minecraft client")
     })

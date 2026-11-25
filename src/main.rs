@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+mod completion;
+mod import_console;
 use clap::{Args, Parser, Subcommand};
 use mcdocker::workspace;
 use std::{
@@ -12,6 +14,7 @@ use std::{
     bin_name = "mcdocker",
     version,
     about = "Manage Minecraft instances from the terminal",
+    after_help = "Examples:\n  mcdocker list -l\n  mcdocker config <instance>\n  mcdocker launch <instance>\n\nRun 'mcdocker <command> --help' for options.",
     arg_required_else_help = true
 )]
 struct Cli {
@@ -31,10 +34,41 @@ struct LaunchOptions {
     player: String,
     #[arg(long, default_value = "00000000-0000-4000-8000-000000000001")]
     uuid: String,
+    #[command(flatten)]
+    extra: ExtraArgs,
+}
+
+#[derive(Args)]
+struct ExtraArgs {
+    /// Additional JVM argument (repeatable, e.g. --jvm-arg=-Xmx4G).
+    #[arg(long, value_name = "ARG", allow_hyphen_values = true)]
+    jvm_arg: Vec<String>,
+    /// Additional Minecraft arguments, following --.
+    #[arg(last = true, value_name = "GAME_ARG")]
+    game_args: Vec<String>,
+}
+
+#[derive(Args)]
+struct ListOptions {
+    /// Show a table with Minecraft, loader, Java and world details.
+    #[arg(short = 'l', long, visible_alias = "details")]
+    long: bool,
+}
+
+#[derive(Subcommand)]
+enum ArgumentAction {
+    /// Clear both groups of saved arguments.
+    Clear { id: Option<String> },
 }
 
 #[derive(Subcommand)]
 enum Command {
+    /// Generate a shell completion script.
+    Completions { shell: clap_complete::Shell },
+    #[command(hide = true, name = "_complete")]
+    Complete,
+    /// Interactively import installed clients from a .minecraft directory.
+    Import { minecraft: PathBuf },
     /// Show the current workspace or set the persistent workspace.
     Workspace {
         #[command(subcommand)]
@@ -49,7 +83,14 @@ enum Command {
     Use { id: String },
     /// List installed instances.
     #[command(visible_alias = "ls")]
-    List,
+    List(ListOptions),
+    /// Edit an instance's default JVM and Minecraft arguments in a text editor.
+    Config { id: Option<String> },
+    /// Reset saved launch arguments.
+    Args {
+        #[command(subcommand)]
+        action: ArgumentAction,
+    },
     /// Check the manifests and shared objects referenced by all installed instances.
     Verify {
         #[arg(long)]
@@ -134,7 +175,7 @@ enum Resources {
 }
 #[derive(Subcommand)]
 enum Instance {
-    List,
+    List(ListOptions),
     Import {
         id: String,
         manifest: PathBuf,
@@ -148,13 +189,70 @@ fn launch(root: &Path, id: &str, world: Option<&str>, options: LaunchOptions) ->
         name: options.player,
         uuid: options.uuid,
     };
-    let status = mcdocker::launch_with_java(root, id, options.java.as_deref(), &player, world)?;
+    let extra = mcdocker::LaunchArguments {
+        jvm: options.extra.jvm_arg,
+        game: options.extra.game_args,
+    };
+    let status =
+        mcdocker::launch_with_args(root, id, options.java.as_deref(), &player, world, &extra)?;
     eprintln!("Java: {status}");
     Ok(status.code().unwrap_or(1))
 }
 
+fn list(root: &Path, options: ListOptions) -> Result<()> {
+    if !options.long {
+        for id in mcdocker::list(root)? {
+            println!("{id}");
+        }
+        return Ok(());
+    }
+    let mut rows = vec![
+        [
+            "INSTANCE",
+            "MINECRAFT",
+            "LOADER",
+            "LOADER VERSION",
+            "JAVA",
+            "WORLDS",
+        ]
+        .map(String::from),
+    ];
+    for info in mcdocker::list_info(root)? {
+        let version = if info.loader == mcdocker::Loader::Vanilla {
+            "-".into()
+        } else {
+            info.loader_version
+        };
+        rows.push([
+            info.id,
+            info.minecraft,
+            info.loader.name().into(),
+            version,
+            info.java_major.to_string(),
+            info.worlds.len().to_string(),
+        ]);
+    }
+    let widths: [usize; 6] =
+        std::array::from_fn(|i| rows.iter().map(|row| row[i].len()).max().unwrap_or(0));
+    for row in rows {
+        for (index, cell) in row.iter().enumerate() {
+            if index == row.len() - 1 {
+                println!("{cell}");
+            } else {
+                print!("{cell:<width$}  ", width = widths[index]);
+            }
+        }
+    }
+    Ok(())
+}
+
 fn run() -> Result<i32> {
     let cli = Cli::parse();
+    match &cli.command {
+        Command::Completions { shell } => return completion::script(*shell).map(|()| 0),
+        Command::Complete => return completion::powershell().map(|()| 0),
+        _ => {}
+    }
     if let Command::Workspace {
         action: Some(Workspace::Use { path }),
     } = &cli.command
@@ -165,6 +263,8 @@ fn run() -> Result<i32> {
     let root = workspace::resolve(cli.workspace)?;
     let current = |id: Option<String>| id.map(Ok).unwrap_or_else(|| workspace::selected(&root));
     match cli.command {
+        Command::Completions { .. } | Command::Complete => unreachable!(),
+        Command::Import { minecraft } => import_console::run(&root, &minecraft)?,
         Command::Resources { action } => match action.unwrap_or(Resources::Show) {
             Resources::Use { path } => {
                 println!("{}", mcdocker::resources::set(&root, &path)?.display())
@@ -230,14 +330,21 @@ fn run() -> Result<i32> {
             workspace::select(&root, &id)?;
             println!("{id}");
         }
-        Command::List
+        Command::List(options)
         | Command::Instance {
-            action: Instance::List,
-        } => {
-            for id in mcdocker::list(&root)? {
-                println!("{id}");
-            }
+            action: Instance::List(options),
+        } => list(&root, options)?,
+        Command::Config { id } => {
+            let path = mcdocker::config::edit(&root, &current(id)?)?;
+            println!("Saved {}", path.display());
         }
+        Command::Args { action } => match action {
+            ArgumentAction::Clear { id } => {
+                let id = current(id)?;
+                mcdocker::set_saved_args(&root, &id, Some(vec![]), Some(vec![]))?;
+                println!("Cleared launch arguments for {id}");
+            }
+        },
         Command::Info { id, json } => {
             let info = mcdocker::info(&root, &current(id)?)?;
             if json {
