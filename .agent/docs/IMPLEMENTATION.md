@@ -1,4 +1,4 @@
-# mcdocker 实现任务书
+# chulch 实现任务书
 
 使用 Rust 实现 Windows CLI，真实启动验收覆盖 Fabric、Forge、NeoForge。导入支持 Modrinth `.mrpack` 和 CurseForge 导出 ZIP。采用自定义存储布局，由加载器适配器生成必要的兼容路径。先交付本地离线原型，再接入微软正版登录。
 

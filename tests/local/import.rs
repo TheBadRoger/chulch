@@ -47,7 +47,7 @@ fn installed_import_selects_clients_and_keeps_worlds_private() -> Result<()> {
         write(&isolated, path, data.as_bytes())?;
     }
     // Select all versions, skip extras for vanilla, choose isolated data and a new ID for Fabric.
-    let mut child = Command::new(env!("CARGO_BIN_EXE_mcdocker"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_chulch"))
         .arg("--workspace")
         .arg(&f.root)
         .arg("import")
@@ -68,8 +68,8 @@ fn installed_import_selects_clients_and_keeps_worlds_private() -> Result<()> {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(
-        mcdocker::info(&f.root, "base")?.loader,
-        mcdocker::Loader::Vanilla
+        chulch::info(&f.root, "base")?.loader,
+        chulch::Loader::Vanilla
     );
     let dir = f.root.join("instances/custom/game");
     assert!(dir.join("defaultconfigs/empty").is_dir());
@@ -98,7 +98,7 @@ fn installed_import_selects_clients_and_keeps_worlds_private() -> Result<()> {
     fs::write(dir.join("saves/World/level.dat"), b"changed")?;
     assert_eq!(fs::read(isolated.join("saves/World/level.dat"))?, b"save");
     assert!(f.blobs()?.iter().all(|p| fs::read(p).unwrap() != b"save"));
-    assert!(mcdocker::installed::discover(&f.source).is_err());
+    assert!(chulch::installed::discover(&f.source).is_err());
     Ok(())
 }
 
@@ -111,10 +111,10 @@ fn import_flat_client_asks_before_downloading_and_keeps_source_intact() -> Resul
     vanilla["assetIndex"]["url"] = json!("https://piston-meta.mojang.com/an-index");
     write(&source, "base.json", &serde_json::to_vec(&vanilla)?)?;
     write(&source, "base.jar", b"client")?;
-    let (clients, warnings) = mcdocker::installed::discover(&source)?;
+    let (clients, warnings) = chulch::installed::discover(&source)?;
     assert!(warnings.is_empty());
     let asked = std::cell::RefCell::new(Vec::new());
-    let res = mcdocker::installed::import(
+    let res = chulch::installed::import(
         &f.root,
         &clients[0],
         "check",
@@ -128,9 +128,9 @@ fn import_flat_client_asks_before_downloading_and_keeps_source_intact() -> Resul
     assert!(res.is_err());
     assert_eq!(*asked.borrow(), ["assets/indexes/5.json"]);
     assert!(!source.join("assets").exists());
-    assert!(mcdocker::list(&f.root)?.is_empty());
+    assert!(chulch::list(&f.root)?.is_empty());
     write(&source, "assets/indexes/5.json", br#"{"objects":{}}"#)?;
-    mcdocker::installed::import(
+    chulch::installed::import(
         &f.root,
         &clients[0],
         "check",
@@ -162,7 +162,7 @@ fn bootstrap_import_requires_generated_minecraft_classes() -> Result<()> {
     }
     let error = f.install("test").unwrap_err();
     assert!(format!("{error:#}").contains("-srg.jar"));
-    assert!(mcdocker::list(&f.root)?.is_empty());
+    assert!(chulch::list(&f.root)?.is_empty());
     write(&f.source, &format!("{generated}-srg.jar"), b"classes")?;
     f.install("test")?;
     Ok(())

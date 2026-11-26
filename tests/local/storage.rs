@@ -11,7 +11,7 @@ fn concurrent_imports_share_bytes_and_preserve_private_files() -> Result<()> {
         f.install("beta")?;
         a.join().unwrap()
     })?;
-    assert_eq!(mcdocker::list(&f.root)?, ["alpha", "beta"]);
+    assert_eq!(chulch::list(&f.root)?, ["alpha", "beta"]);
     assert_eq!(f.blobs()?.len(), 5);
     let alpha = f.root.join("instances/alpha/game");
     let beta = f.root.join("instances/beta/game");
@@ -37,7 +37,7 @@ fn maintenance_counts_shared_objects_once_and_names_affected_instances() -> Resu
         .iter()
         .map(|p| fs::metadata(p).unwrap().len())
         .sum::<u64>();
-    let original = mcdocker::maintenance::usage(&f.root)?;
+    let original = chulch::maintenance::usage(&f.root)?;
     write(
         &f.root,
         "instances/alpha/game/saves/test/level.dat",
@@ -45,7 +45,7 @@ fn maintenance_counts_shared_objects_once_and_names_affected_instances() -> Resu
     )?;
     write(&f.root, "work/run-test/client.jar", b"client")?;
     write(&f.root, "work/install-test/file", b"unrelated")?;
-    let usage = mcdocker::maintenance::usage(&f.root)?;
+    let usage = chulch::maintenance::usage(&f.root)?;
     assert_eq!(
         (usage.store_bytes, usage.referenced_bytes, usage.saved_bytes),
         (expected, expected, expected)
@@ -59,7 +59,7 @@ fn maintenance_counts_shared_objects_once_and_names_affected_instances() -> Resu
         usage.private_bytes_by_instance["beta"],
         original.private_bytes_by_instance["beta"]
     );
-    let report = mcdocker::maintenance::verify(&f.root)?;
+    let report = chulch::maintenance::verify(&f.root)?;
     assert_eq!(report.checked_objects, blobs.len());
     assert!(report.issues.is_empty());
 
@@ -67,7 +67,7 @@ fn maintenance_counts_shared_objects_once_and_names_affected_instances() -> Resu
     let mut corrupt = fs::read(&blobs[1])?;
     corrupt[0] ^= 1;
     fs::write(&blobs[1], corrupt)?;
-    let output = Command::new(env!("CARGO_BIN_EXE_mcdocker"))
+    let output = Command::new(env!("CARGO_BIN_EXE_chulch"))
         .arg("--workspace")
         .arg(&f.root)
         .args(["verify", "--json"])
@@ -80,7 +80,7 @@ fn maintenance_counts_shared_objects_once_and_names_affected_instances() -> Resu
         assert_eq!(issue["instances"], json!(["alpha", "beta"]));
     }
     fs::write(f.root.join("instances/alpha/profile.json"), b"invalid")?;
-    let report = mcdocker::maintenance::verify(&f.root)?;
+    let report = chulch::maintenance::verify(&f.root)?;
     assert_eq!(report.issues.len(), 3);
     assert!(
         report
@@ -101,7 +101,7 @@ fn integrity_failures_never_publish_a_partial_instance() -> Result<()> {
             .to_string()
             .contains("SHA-1")
     );
-    assert!(mcdocker::list(&f.root)?.is_empty());
+    assert!(chulch::list(&f.root)?.is_empty());
     fs::write(f.source.join("client.jar"), b"client")?;
     f.install("first")?;
     let blob = f
@@ -116,7 +116,7 @@ fn integrity_failures_never_publish_a_partial_instance() -> Result<()> {
             .to_string()
             .contains("damaged blob")
     );
-    assert_eq!(mcdocker::list(&f.root)?, ["first"]);
+    assert_eq!(chulch::list(&f.root)?, ["first"]);
     Ok(())
 }
 
@@ -133,7 +133,7 @@ fn unsupported_schema_and_unsafe_or_colliding_targets_are_rejected() -> Result<(
         f.recipe["packFiles"][1]["target"] = json!(target);
         fs::write(&f.manifest, serde_json::to_vec(&f.recipe)?)?;
         assert!(f.install("bad").is_err(), "{target}");
-        assert!(mcdocker::list(&f.root)?.is_empty());
+        assert!(chulch::list(&f.root)?.is_empty());
     }
     f.recipe["packFiles"] = json!([
         {"role":"template","source":"options.txt","target":"config/Example/a.txt"},

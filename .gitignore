@@ -1,5 +1,6 @@
 /target/
 /dist/
+/.chulch/
 /.mcdocker/
 
 # Local configuration and credentials

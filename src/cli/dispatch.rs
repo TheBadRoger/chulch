@@ -3,8 +3,8 @@ use super::{
     Resources, Workspace, completion, import_console,
 };
 use anyhow::{Context, Result};
+use chulch::workspace;
 use clap::Parser;
-use mcdocker::workspace;
 use std::{
     env,
     path::{Path, PathBuf},
@@ -15,36 +15,36 @@ fn launch(root: &Path, id: &str, world: Option<&str>, options: LaunchOptions) ->
     let session;
     let identity = match options.account {
         AccountMode::Offline => {
-            player = mcdocker::Player {
+            player = chulch::Player {
                 name: options.player.unwrap_or_else(|| "Player".into()),
                 uuid: options
                     .uuid
                     .unwrap_or_else(|| "00000000-0000-4000-8000-000000000001".into()),
             };
-            mcdocker::LaunchIdentity::Offline(&player)
+            chulch::LaunchIdentity::Offline(&player)
         }
         AccountMode::Microsoft => {
             anyhow::ensure!(
                 options.player.is_none() && options.uuid.is_none(),
                 "--player and --uuid only apply to offline accounts"
             );
-            session = mcdocker::account::session()?;
-            mcdocker::LaunchIdentity::Microsoft(&session)
+            session = chulch::account::session()?;
+            chulch::LaunchIdentity::Microsoft(&session)
         }
     };
-    let extra = mcdocker::LaunchArguments {
+    let extra = chulch::LaunchArguments {
         jvm: options.extra.jvm_arg,
         game: options.extra.game_args,
     };
     let status =
-        mcdocker::launch_with_identity(root, id, options.java.as_deref(), identity, world, &extra)?;
+        chulch::launch_with_identity(root, id, options.java.as_deref(), identity, world, &extra)?;
     eprintln!("Java: {status}");
     Ok(status.code().unwrap_or(1))
 }
 
 fn list(root: &Path, options: ListOptions) -> Result<()> {
     if !options.long {
-        for id in mcdocker::list(root)? {
+        for id in chulch::list(root)? {
             println!("{id}");
         }
         return Ok(());
@@ -60,8 +60,8 @@ fn list(root: &Path, options: ListOptions) -> Result<()> {
         ]
         .map(String::from),
     ];
-    for info in mcdocker::list_info(root)? {
-        let version = if info.loader == mcdocker::Loader::Vanilla {
+    for info in chulch::list_info(root)? {
+        let version = if info.loader == chulch::Loader::Vanilla {
             "-".into()
         } else {
             info.loader_version
@@ -95,15 +95,15 @@ pub(crate) fn run() -> Result<i32> {
         Command::Account { action } => {
             match action {
                 AccountAction::Login { client_id } => {
-                    let id = client_id.clone().or_else(|| env::var("MCDOCKER_MICROSOFT_CLIENT_ID").ok()).context("Supply --client-id or set MCDOCKER_MICROSOFT_CLIENT_ID to your registered public application ID")?;
-                    println!("Signed in as {}", mcdocker::account::login(&id)?);
+                    let id = client_id.clone().or_else(|| env::var("CHULCH_MICROSOFT_CLIENT_ID").or_else(|_| env::var("MCDOCKER_MICROSOFT_CLIENT_ID")).ok()).context("Supply --client-id or set CHULCH_MICROSOFT_CLIENT_ID to your registered public application ID")?;
+                    println!("Signed in as {}", chulch::account::login(&id)?);
                 }
-                AccountAction::Status => match mcdocker::account::status()? {
+                AccountAction::Status => match chulch::account::status()? {
                     Some((name, uuid)) => println!("Saved Minecraft profile: {name} ({uuid})"),
                     None => println!("No Microsoft account saved."),
                 },
                 AccountAction::Logout => {
-                    mcdocker::account::logout()?;
+                    chulch::account::logout()?;
                     println!("Local Microsoft sign-in data removed.");
                 }
             }
@@ -127,20 +127,20 @@ pub(crate) fn run() -> Result<i32> {
         Command::Import { minecraft } => import_console::run(&root, &minecraft)?,
         Command::Resources { action } => match action.unwrap_or(Resources::Show) {
             Resources::Use { path } => {
-                println!("{}", mcdocker::resources::set(&root, &path)?.display())
+                println!("{}", chulch::resources::set(&root, &path)?.display())
             }
-            Resources::Show => match mcdocker::resources::current()? {
+            Resources::Show => match chulch::resources::current()? {
                 Some(path) => println!("{}", path.display()),
                 None => println!("No shared resource directory configured."),
             },
             Resources::Clear => {
-                mcdocker::resources::clear()?;
+                chulch::resources::clear()?;
                 println!("Disconnected the shared resource directory.");
             }
         },
         Command::Workspace { .. } => println!("{}", root.display()),
         Command::Verify { json } => {
-            let report = mcdocker::maintenance::verify(&root)?;
+            let report = chulch::maintenance::verify(&root)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
@@ -162,7 +162,7 @@ pub(crate) fn run() -> Result<i32> {
             return Ok(i32::from(!report.issues.is_empty()));
         }
         Command::Usage { json } => {
-            let usage = mcdocker::maintenance::usage(&root)?;
+            let usage = chulch::maintenance::usage(&root)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&usage)?);
             } else {
@@ -195,18 +195,18 @@ pub(crate) fn run() -> Result<i32> {
             action: Instance::List(options),
         } => list(&root, options)?,
         Command::Config { id } => {
-            let path = mcdocker::config::edit(&root, &current(id)?)?;
+            let path = chulch::config::edit(&root, &current(id)?)?;
             println!("Saved {}", path.display());
         }
         Command::Args { action } => match action {
             ArgumentAction::Clear { id } => {
                 let id = current(id)?;
-                mcdocker::set_saved_args(&root, &id, Some(vec![]), Some(vec![]))?;
+                chulch::set_saved_args(&root, &id, Some(vec![]), Some(vec![]))?;
                 println!("Cleared launch arguments for {id}");
             }
         },
         Command::Info { id, json } => {
-            let info = mcdocker::info(&root, &current(id)?)?;
+            let info = chulch::info(&root, &current(id)?)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&info)?);
             } else {
@@ -224,8 +224,8 @@ pub(crate) fn run() -> Result<i32> {
             }
         }
         Command::Java { id, install } => {
-            let major = mcdocker::info(&root, &current(id)?)?.java_major;
-            let j = mcdocker::java::select(&root, major, None, install)?;
+            let major = chulch::info(&root, &current(id)?)?.java_major;
+            let j = chulch::java::select(&root, major, None, install)?;
             println!("{}  {}", j.version, j.executable.display());
         }
         Command::Launch { id, world, options } => {
@@ -244,7 +244,7 @@ pub(crate) fn run() -> Result<i32> {
         }
         Command::Uninstall { id, delete_data } => {
             let id = current(id)?;
-            match mcdocker::uninstall(&root, &id, delete_data)? {
+            match chulch::uninstall(&root, &id, delete_data)? {
                 Some(saved) => println!("Uninstalled {id}. Data retained in {}", saved.display()),
                 None => println!("Uninstalled {id} and deleted its private data."),
             }
@@ -257,7 +257,7 @@ pub(crate) fn run() -> Result<i32> {
                     source,
                 },
         } => {
-            mcdocker::import(&root, &id, &manifest, &source)?;
+            chulch::import(&root, &id, &manifest, &source)?;
             println!("Installed {id}");
         }
         Command::Install {
@@ -274,21 +274,25 @@ pub(crate) fn run() -> Result<i32> {
                     .to_ascii_lowercase()
                     .replace(|c: char| !c.is_ascii_alphanumeric() && c != '_', "-")
             });
-            let source = source.or_else(|| env::var_os("MCDOCKER_SOURCE").map(PathBuf::from));
+            let source = source.or_else(|| {
+                env::var_os("CHULCH_SOURCE")
+                    .or_else(|| env::var_os("MCDOCKER_SOURCE"))
+                    .map(PathBuf::from)
+            });
             if pack
                 .extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("json"))
             {
-                mcdocker::import(
+                chulch::import(
                     &root,
                     &id,
                     &pack,
                     source
                         .as_deref()
-                        .context("a local recipe requires --source or MCDOCKER_SOURCE")?,
+                        .context("a local recipe requires --source or CHULCH_SOURCE")?,
                 )?;
             } else {
-                mcdocker::install_pack(
+                chulch::install_pack(
                     &root,
                     &id,
                     &pack,

@@ -75,7 +75,7 @@ impl Fixture {
     }
 
     pub(super) fn install(&self, id: &str) -> Result<()> {
-        mcdocker::import(&self.root, id, &self.manifest, &self.source)
+        chulch::import(&self.root, id, &self.manifest, &self.source)
     }
 
     pub(super) fn blobs(&self) -> Result<Vec<PathBuf>> {

@@ -6,7 +6,7 @@ fn main() -> ExitCode {
         Ok(0) => ExitCode::SUCCESS,
         Ok(code) => std::process::exit(code),
         Err(err) => {
-            eprintln!("mcdocker: {err:#}");
+            eprintln!("chulch: {err:#}");
             ExitCode::FAILURE
         }
     }

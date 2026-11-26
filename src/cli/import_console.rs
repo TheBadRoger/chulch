@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, ensure};
-use mcdocker::installed::{self, Options};
+use chulch::installed::{self, Options};
 use std::{
     cell::Cell,
     collections::BTreeSet,

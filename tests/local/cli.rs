@@ -23,12 +23,14 @@ fn terminal_workflow_with_persistent_workspace_and_two_archive_formats() -> Resu
     };
     write(f._dir.path(), script, body.as_bytes())?;
     let cli = |args: &[&str]| -> Result<String> {
-        let out = Command::new(env!("CARGO_BIN_EXE_mcdocker"))
+        let out = Command::new(env!("CARGO_BIN_EXE_chulch"))
             .args(args)
             .current_dir(f._dir.path())
             .env("APPDATA", &appdata)
             .env("VISUAL", editor)
+            .env_remove("CHULCH_WORKSPACE")
             .env_remove("MCDOCKER_WORKSPACE")
+            .env_remove("CHULCH_SOURCE")
             .env_remove("MCDOCKER_SOURCE")
             .env_remove("CURSEFORGE_API_KEY")
             .output()?;
@@ -108,7 +110,7 @@ fn terminal_workflow_with_persistent_workspace_and_two_archive_formats() -> Resu
     );
     let legacy = br#"{"jvm":["-Xmx2G"],"game":[]}"#;
     write(&f.root, "instances/two/launch-args.json", legacy)?;
-    assert_eq!(mcdocker::saved_args(&f.root, "two")?.jvm, ["-Xmx2G"]);
+    assert_eq!(chulch::saved_args(&f.root, "two")?.jvm, ["-Xmx2G"]);
     let saved = f.root.join("instances/two/launch-args.toml");
     let settings = b"[jvm]\nmax_memory = '3G'\n[game]\n# window size\nwidth = 1280\n";
     write(f._dir.path(), "next.json", settings)?;
@@ -127,10 +129,7 @@ fn terminal_workflow_with_persistent_workspace_and_two_archive_formats() -> Resu
     assert_eq!(fs::read(f._dir.path().join("opened.json"))?, settings);
     assert_eq!(fs::read(&saved)?, settings);
     fs::write(&saved, b"jvm = ['-Xms64M']\ngame = ['--width','800']\n")?;
-    assert_eq!(
-        mcdocker::saved_args(&f.root, "two")?.game,
-        ["--width", "800"]
-    );
+    assert_eq!(chulch::saved_args(&f.root, "two")?.game, ["--width", "800"]);
     write(f._dir.path(), "next.json", settings)?;
     cli(&["config", "two"])?;
     for removed in ["set", "show"] {
@@ -142,7 +141,7 @@ fn terminal_workflow_with_persistent_workspace_and_two_archive_formats() -> Resu
         );
     }
     cli(&["args", "clear"])?;
-    let cleared = mcdocker::saved_args(&f.root, "two")?;
+    let cleared = chulch::saved_args(&f.root, "two")?;
     assert!(cleared.jvm.is_empty() && cleared.game.is_empty());
     assert!(cli(&["account", "status"])?.contains("No Microsoft account"));
     for cmd in [

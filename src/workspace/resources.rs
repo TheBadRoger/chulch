@@ -204,7 +204,7 @@ fn prepare(instance: &Path, stage: &Path, pool: &Path) -> Result<()> {
         let source = under(pool, kind)?;
         let real = source.canonicalize().with_context(|| {
             format!(
-                "open shared {kind} at {}; reconnect the directory or run mcdocker resources clear",
+                "open shared {kind} at {}; reconnect the directory or run chulch resources clear",
                 source.display()
             )
         })?;

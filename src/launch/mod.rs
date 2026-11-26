@@ -217,7 +217,7 @@ pub fn launch_with_identity(
                 "clientid" | "auth_xuid" => Some(""),
                 "user_type" => Some("legacy"),
                 "version_type" => Some("release"),
-                "launcher_name" => Some("mcdocker"),
+                "launcher_name" => Some("chulch"),
                 "launcher_version" => Some(env!("CARGO_PKG_VERSION")),
                 _ => anyhow::bail!("unsupported launch placeholder {key}"),
             };

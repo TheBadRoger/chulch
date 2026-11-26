@@ -213,9 +213,9 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "downloads the official NeoForge installer and dependencies; set MCDOCKER_TEST_SOURCE to a Minecraft 1.21.1 installation"]
+    #[ignore = "downloads the official NeoForge installer and dependencies; set CHULCH_TEST_SOURCE to a Minecraft 1.21.1 installation"]
     fn official_neoforge_installer_generates_the_client_files() -> Result<()> {
-        let source = std::env::var_os("MCDOCKER_TEST_SOURCE").context("MCDOCKER_TEST_SOURCE")?;
+        let source = std::env::var_os("CHULCH_TEST_SOURCE").context("CHULCH_TEST_SOURCE")?;
         let tmp = tempfile::tempdir_in(std::path::absolute("target")?)?;
         let base = tmp.path().join("base");
         let vanilla = "versions/1.21.1";

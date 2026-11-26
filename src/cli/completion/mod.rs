@@ -14,7 +14,7 @@ pub fn script(shell: Shell) -> Result<()> {
         use io::Write;
         io::stdout().write_all(powershell::REGISTER.as_bytes())?;
     } else {
-        clap_complete::generate(shell, &mut Cli::command(), "mcdocker", &mut io::stdout());
+        clap_complete::generate(shell, &mut Cli::command(), "chulch", &mut io::stdout());
     }
     Ok(())
 }
@@ -45,8 +45,8 @@ fn candidates(words: Vec<String>) -> Result<Vec<CompletionCandidate>> {
     }
     let workspace = workspace_option(previous);
     let instances = ArgValueCandidates::new(move || {
-        mcdocker::workspace::resolve(workspace.clone())
-            .and_then(|root| mcdocker::list(&root))
+        chulch::workspace::resolve(workspace.clone())
+            .and_then(|root| chulch::list(&root))
             .unwrap_or_default()
             .into_iter()
             .map(|id| CompletionCandidate::new(id).help(Some("Installed instance".into())))
@@ -92,13 +92,13 @@ mod tests {
     #[test]
     fn suggests_flags_with_help_and_stops_at_game_arguments() -> Result<()> {
         let words = |items: &[&str]| items.iter().map(|s| s.to_string()).collect();
-        let flags = candidates(words(&["mcdocker", "run", "--jvm"]))?;
+        let flags = candidates(words(&["chulch", "run", "--jvm"]))?;
         assert!(
             flags
                 .iter()
                 .any(|f| f.get_value() == "--jvm-arg" && f.get_help().is_some())
         );
-        assert!(candidates(words(&["mcdocker", "run", "--", "--jvm"]))?.is_empty());
+        assert!(candidates(words(&["chulch", "run", "--", "--jvm"]))?.is_empty());
         Ok(())
     }
 }

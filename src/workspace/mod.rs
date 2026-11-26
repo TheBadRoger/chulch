@@ -27,10 +27,16 @@ struct Selection {
 }
 
 pub(crate) fn config_dir() -> Result<PathBuf> {
-    Ok(
-        PathBuf::from(env::var_os("APPDATA").context("APPDATA is unavailable; pass --workspace")?)
-            .join("mcdocker"),
-    )
+    let base =
+        PathBuf::from(env::var_os("APPDATA").context("APPDATA is unavailable; pass --workspace")?);
+    preferred_dir(base.join("chulch"), base.join("mcdocker"))
+}
+
+fn preferred_dir(current: PathBuf, legacy: PathBuf) -> Result<PathBuf> {
+    if !current.try_exists()? && legacy.is_dir() {
+        return Ok(legacy);
+    }
+    Ok(current)
 }
 
 pub(crate) fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
@@ -44,7 +50,11 @@ pub(crate) fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
 }
 
 pub fn resolve(explicit: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(path) = explicit.or_else(|| env::var_os("MCDOCKER_WORKSPACE").map(PathBuf::from)) {
+    if let Some(path) = explicit.or_else(|| {
+        env::var_os("CHULCH_WORKSPACE")
+            .or_else(|| env::var_os("MCDOCKER_WORKSPACE"))
+            .map(PathBuf::from)
+    }) {
         return Ok(std::path::absolute(path)?);
     }
     let config = config_dir()?.join("settings.json");
@@ -52,13 +62,17 @@ pub fn resolve(explicit: Option<PathBuf>) -> Result<PathBuf> {
         let settings: Settings = serde_json::from_reader(fs::File::open(config)?)?;
         return Ok(settings.workspace);
     }
-    if Path::new(".mcdocker").is_dir() {
-        return Ok(std::path::absolute(".mcdocker")?);
+    let local = preferred_dir(".chulch".into(), ".mcdocker".into())?;
+    if local.is_dir() {
+        return Ok(std::path::absolute(local)?);
     }
-    Ok(PathBuf::from(
+    let base = PathBuf::from(
         env::var_os("LOCALAPPDATA").context("LOCALAPPDATA is unavailable; pass --workspace")?,
+    );
+    preferred_dir(
+        base.join("chulch/workspace"),
+        base.join("mcdocker/workspace"),
     )
-    .join("mcdocker/workspace"))
 }
 
 pub fn set_default(path: &Path) -> Result<PathBuf> {
@@ -93,7 +107,26 @@ pub fn select(root: &Path, id: &str) -> Result<()> {
 
 pub fn selected(root: &Path) -> Result<String> {
     let file = fs::File::open(under(root, "selected.json")?)
-        .context("no current instance; specify an id or run mcdocker use <id>")?;
+        .context("no current instance; specify an id or run chulch use <id>")?;
     let selection: Selection = serde_json::from_reader(file)?;
     Ok(selection.instance)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_installs_use_chulch_and_upgrades_find_the_existing_directory() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let current = temp.path().join("chulch");
+        let legacy = temp.path().join("mcdocker");
+        let choose = || preferred_dir(current.clone(), legacy.clone());
+        assert_eq!(choose()?, current);
+        fs::create_dir(&legacy)?;
+        assert_eq!(choose()?, legacy);
+        fs::create_dir(&current)?;
+        assert_eq!(choose()?, current);
+        Ok(())
+    }
 }

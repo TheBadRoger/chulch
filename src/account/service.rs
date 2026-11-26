@@ -51,9 +51,7 @@ impl Reply {
     fn success(self, step: &str) -> Result<Value> {
         if !(200..300).contains(&self.status) {
             let hint = match self.body.get("error").and_then(Value::as_str) {
-                Some("invalid_grant" | "interaction_required") => {
-                    "Run mcdocker account login again."
-                }
+                Some("invalid_grant" | "interaction_required") => "Run chulch account login again.",
                 Some("authorization_declined" | "access_denied") => "Authorization was declined.",
                 Some("expired_token") => "The sign-in code expired. Start login again.",
                 Some("invalid_client" | "unauthorized_client") => {

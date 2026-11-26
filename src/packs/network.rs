@@ -20,15 +20,17 @@ pub(crate) struct Network {
 
 impl Network {
     pub fn new() -> Result<Self> {
-        let mirror = env::var("MCDOCKER_MIRROR").unwrap_or_else(|_| BMCLAPI.into());
+        let mirror = env::var("CHULCH_MIRROR")
+            .or_else(|_| env::var("MCDOCKER_MIRROR"))
+            .unwrap_or_else(|_| BMCLAPI.into());
         let mirror = mirror.trim_end_matches('/');
-        let uri: ureq::http::Uri = mirror.parse().context("invalid MCDOCKER_MIRROR")?;
+        let uri: ureq::http::Uri = mirror.parse().context("invalid CHULCH_MIRROR")?;
         ensure!(
             uri.scheme_str() == Some("https")
                 && uri.authority().is_some_and(|a| !a.as_str().contains('@'))
                 && uri.query().is_none()
                 && !mirror.contains('#'),
-            "MCDOCKER_MIRROR must be an HTTPS base URL"
+            "CHULCH_MIRROR must be an HTTPS base URL"
         );
         Ok(Self {
             mirror: mirror.to_owned(),
@@ -54,7 +56,7 @@ impl Network {
         );
         self.agent
             .get(url)
-            .header("User-Agent", "mcdocker/0.1")
+            .header("User-Agent", "chulch/0.1")
             .call()
             .map(|r| r.into_body())
             .with_context(|| format!("request to {} failed", uri.host().unwrap_or("upstream")))
@@ -129,7 +131,10 @@ impl Network {
             }
             match result {
                 Ok(()) => {
-                    if (index > 0 || env::var_os("MCDOCKER_TRACE_DOWNLOADS").is_some())
+                    if (index > 0
+                        || env::var_os("CHULCH_TRACE_DOWNLOADS")
+                            .or_else(|| env::var_os("MCDOCKER_TRACE_DOWNLOADS"))
+                            .is_some())
                         && let Ok(uri) = url.parse::<ureq::http::Uri>()
                     {
                         eprintln!("Downloaded from {}", uri.host().unwrap_or("upstream"));

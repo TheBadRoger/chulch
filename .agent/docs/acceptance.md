@@ -53,7 +53,7 @@
 
 运行 `cargo test --locked` 可验证并发导入、去重、私有文件隔离、完整性校验和非法路径处理。
 
-Windows 上将 `MCDOCKER_TEST_JAVA` 指向 64 位 Java 17 的可执行文件，再运行 `cargo test --locked failed_java -- --ignored` 可验证 JVM 失败后的锁释放与存档保留。要验收全新工作区的官方下载，将 `MCDOCKER_TEST_PACK` 指向 Fabric 分发包的绝对路径，再运行 `cargo test --locked installs_public_pack -- --ignored --nocapture`。
+Windows 上将 `CHULCH_TEST_JAVA` 指向 64 位 Java 17 的可执行文件，再运行 `cargo test --locked failed_java -- --ignored` 可验证 JVM 失败后的锁释放与存档保留。要验收全新工作区的官方下载，将 `CHULCH_TEST_PACK` 指向 Fabric 分发包的绝对路径，再运行 `cargo test --locked installs_public_pack -- --ignored --nocapture`。
 
 ## 命令行与分发包验收记录
 
@@ -73,7 +73,7 @@ Windows 上将 `MCDOCKER_TEST_JAVA` 指向 64 位 Java 17 的可执行文件，�
 
 两组 BootstrapLauncher 客户端都需要运行库目录中的 `client-…-srg.jar` 和 `client-…-extra.jar`。前者缺失时，Forge 能创建早期窗口，但在启动客户端时报告找不到 Minecraft 类。回归测试还覆盖两种分发格式、相同版本号的不同加载器、加载器参数和跨实例复用。
 
-NeoForge 官方安装器的生成测试可单独运行。将 `MCDOCKER_TEST_SOURCE` 设为含 Minecraft 1.21.1 原版的安装目录，运行 `cargo test --locked --lib official_neoforge_installer -- --ignored --nocapture`。早期直连 `maven.neoforged.net` 时在获取校验值处超时。切换国内镜像后，21.1.228 安装器和依赖下载测试通过，官方处理器生成了启动所需的全部客户端文件。上表记录的是使用本地源的真实客户端启动。
+NeoForge 官方安装器的生成测试可单独运行。将 `CHULCH_TEST_SOURCE` 设为含 Minecraft 1.21.1 原版的安装目录，运行 `cargo test --locked --lib official_neoforge_installer -- --ignored --nocapture`。早期直连 `maven.neoforged.net` 时在获取校验值处超时。切换国内镜像后，21.1.228 安装器和依赖下载测试通过，官方处理器生成了启动所需的全部客户端文件。上表记录的是使用本地源的真实客户端启动。
 
 Forge 47.3.0 另从空工作区下载了 Mojang 游戏文件和官方安装器。官方安装器成功生成客户端补丁。下载 3,577 个资源对象时，三个大文件在官方源重试后断开。保留已下载的文件，经 BMCLAPI 补齐缺项并核对官方 SHA-1，再用这份源目录执行 `install`。安装后的客户端完成渲染，退出码为 0。单次仅用官方源的完整安装未通过。
 

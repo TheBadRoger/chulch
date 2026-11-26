@@ -3,12 +3,12 @@ use anyhow::{Context, Result};
 use std::{fs, path::Path, path::PathBuf, process::Command};
 
 #[test]
-#[ignore = "set MCDOCKER_TEST_JAVA to java.exe from a Windows x64 JDK 17"]
+#[ignore = "set CHULCH_TEST_JAVA to java.exe from a Windows x64 JDK 17"]
 fn shared_packs_reach_the_client_on_launch_and_quick() -> Result<()> {
     let a = Fixture::new()?;
     let b = Fixture::new()?;
     let tmp = a._dir.path();
-    let java = PathBuf::from(std::env::var_os("MCDOCKER_TEST_JAVA").context("MCDOCKER_TEST_JAVA")?);
+    let java = PathBuf::from(std::env::var_os("CHULCH_TEST_JAVA").context("CHULCH_TEST_JAVA")?);
     let bin = java.parent().unwrap();
     fs::write(
         tmp.join("KnotClient.java"),
@@ -57,7 +57,7 @@ public class KnotClient {
     )?;
     let pool = tmp.join("public packs");
     let run = |root: &Path, args: &[&str], active: bool| -> Result<String> {
-        let output = Command::new(env!("CARGO_BIN_EXE_mcdocker"))
+        let output = Command::new(env!("CARGO_BIN_EXE_chulch"))
             .arg("--workspace")
             .arg(root)
             .args(args)
@@ -176,16 +176,16 @@ extra = ["--width=800", "--fullscreen", "--label", "saved value"]
 
 #[cfg(windows)]
 #[test]
-#[ignore = "set MCDOCKER_TEST_JAVA to a Windows x64 Java 17 executable"]
+#[ignore = "set CHULCH_TEST_JAVA to a Windows x64 Java 17 executable"]
 fn failed_java_releases_run_lock_and_leaves_worlds_in_place() -> Result<()> {
     let f = Fixture::new()?;
     f.install("alpha")?;
-    let java = PathBuf::from(std::env::var_os("MCDOCKER_TEST_JAVA").expect("MCDOCKER_TEST_JAVA"));
-    let player = mcdocker::Player {
+    let java = PathBuf::from(std::env::var_os("CHULCH_TEST_JAVA").expect("CHULCH_TEST_JAVA"));
+    let player = chulch::Player {
         name: "Player".into(),
         uuid: "00000000-0000-4000-8000-000000000001".into(),
     };
-    let launch = |world| mcdocker::launch(&f.root, "alpha", &java, &player, world);
+    let launch = |world| chulch::launch(&f.root, "alpha", &java, &player, world);
     let instance = f.root.join("instances/alpha");
     let held = fs::File::create(instance.join("run.lock"))?;
     held.lock()?;

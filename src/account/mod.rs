@@ -148,7 +148,7 @@ pub fn session() -> Result<Session> {
     let vault = Vault::open()?;
     let mut account = vault
         .load()?
-        .context("No Microsoft account saved. Run mcdocker account login first.")?;
+        .context("No Microsoft account saved. Run chulch account login first.")?;
     let service = service::Service::new();
     let tokens = service.refresh(&account.client, &account.refresh)?;
     if let Some(refresh) = tokens.refresh_token {

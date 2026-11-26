@@ -8,14 +8,14 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
-    bin_name = "mcdocker",
+    bin_name = "chulch",
     version,
     about = "Manage Minecraft instances from the terminal",
-    after_help = "Examples:\n  mcdocker list -l\n  mcdocker config <instance>\n  mcdocker launch <instance>\n\nRun 'mcdocker <command> --help' for options.",
+    after_help = "Examples:\n  chulch list -l\n  chulch config <instance>\n  chulch launch <instance>\n\nRun 'chulch <command> --help' for options.",
     arg_required_else_help = true
 )]
 struct Cli {
-    /// Data workspace for this command (also MCDOCKER_WORKSPACE).
+    /// Data workspace for this command (also CHULCH_WORKSPACE).
     #[arg(long, visible_alias = "root", global = true)]
     workspace: Option<PathBuf>,
     #[command(subcommand)]
@@ -50,7 +50,7 @@ enum AccountMode {
 enum AccountAction {
     /// Sign in on Microsoft's website and save the verified Java account.
     Login {
-        /// Public application (client) ID; also reads MCDOCKER_MICROSOFT_CLIENT_ID.
+        /// Public application (client) ID; also reads CHULCH_MICROSOFT_CLIENT_ID.
         #[arg(long)]
         client_id: Option<String>,
     },

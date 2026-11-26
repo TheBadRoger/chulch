@@ -39,10 +39,10 @@ fn archive_loaders_keep_distinct_launch_plans_for_the_same_version() -> Result<(
         };
         let pack = f._dir.path().join(format!("{kind}.zip"));
         pack_zip(&pack, format, &manifest, &[])?;
-        mcdocker::install_pack(&f.root, kind, &pack, Some(&f.source), None, false)?;
+        chulch::install_pack(&f.root, kind, &pack, Some(&f.source), None, false)?;
         let clone = format!("{kind}-copy");
-        mcdocker::install_pack(&f.root, &clone, &pack, None, None, false)?;
-        let info = mcdocker::info(&f.root, &clone)?;
+        chulch::install_pack(&f.root, &clone, &pack, None, None, false)?;
+        let info = chulch::info(&f.root, &clone)?;
         assert_eq!(info.loader.name().to_ascii_lowercase(), kind);
         assert_eq!(info.loader_version, version);
         let reference: Value = serde_json::from_slice(&fs::read(
@@ -84,20 +84,20 @@ fn rejects_zip_traversal_before_creating_an_instance() -> Result<()> {
         &json!({}),
         &[("overrides/../outside", b"x")],
     )?;
-    let err = mcdocker::install_pack(&f.root, "bad", &archive, None, None, false).unwrap_err();
+    let err = chulch::install_pack(&f.root, "bad", &archive, None, None, false).unwrap_err();
     assert!(err.to_string().contains("unsafe Windows path component"));
-    assert!(mcdocker::list(&f.root)?.is_empty());
+    assert!(chulch::list(&f.root)?.is_empty());
     Ok(())
 }
 
 #[test]
-#[ignore = "downloads the Fabric pack in MCDOCKER_TEST_PACK and its base game into a temporary workspace"]
+#[ignore = "downloads the Fabric pack in CHULCH_TEST_PACK and its base game into a temporary workspace"]
 fn installs_public_pack_into_empty_workspace() -> Result<()> {
-    let pack =
-        PathBuf::from(std::env::var_os("MCDOCKER_TEST_PACK").context("set MCDOCKER_TEST_PACK")?);
+    let pack = PathBuf::from(std::env::var_os("CHULCH_TEST_PACK").context("set CHULCH_TEST_PACK")?);
     let tmp = tempfile::tempdir_in("target")?;
-    let output = Command::new(env!("CARGO_BIN_EXE_mcdocker"))
+    let output = Command::new(env!("CARGO_BIN_EXE_chulch"))
         .env("APPDATA", tmp.path())
+        .env_remove("CHULCH_SOURCE")
         .env_remove("MCDOCKER_SOURCE")
         .arg("--workspace")
         .arg(tmp.path().join("workspace"))
@@ -107,7 +107,7 @@ fn installs_public_pack_into_empty_workspace() -> Result<()> {
         .status()?;
     anyhow::ensure!(output.success(), "public pack installation failed");
     assert_eq!(
-        mcdocker::list(&tmp.path().join("workspace"))?,
+        chulch::list(&tmp.path().join("workspace"))?,
         ["public-pack"]
     );
     Ok(())

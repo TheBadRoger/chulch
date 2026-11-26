@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::io;
 
 // PowerShell owns the syntax tree and the completion menu. Never evaluate the input line.
-pub(super) const REGISTER: &str = r#"Register-ArgumentCompleter -Native -CommandName mcdocker,mcdocker.exe -ScriptBlock {
+pub(super) const REGISTER: &str = r#"Register-ArgumentCompleter -Native -CommandName chulch,chulch.exe -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
     $tokens = @(foreach ($e in $commandAst.CommandElements) {
         $value = if ($e -is [System.Management.Automation.Language.StringConstantExpressionAst]) { $e.Value } else { $e.Extent.Text }
@@ -12,7 +12,7 @@ pub(super) const REGISTER: &str = r#"Register-ArgumentCompleter -Native -Command
     })
     $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
     $request = @{ tokens = $tokens; cursor = $cursorPosition; prefix = [string]$wordToComplete }
-    $rows = ConvertTo-Json -Compress -Depth 4 $request | mcdocker _complete | ConvertFrom-Json
+    $rows = ConvertTo-Json -Compress -Depth 4 $request | chulch _complete | ConvertFrom-Json
     foreach ($row in $rows) {
         [System.Management.Automation.CompletionResult]::new($row.insert, $row.value, 'ParameterValue', $row.help)
     }
@@ -48,7 +48,7 @@ impl Request {
             } => (tokens, cursor, prefix),
             Self::Words(words) => return words,
         };
-        let mut words = vec![String::from("mcdocker")];
+        let mut words = vec![String::from("chulch")];
         for token in tokens.into_iter().skip(1) {
             if token.start >= cursor {
                 break;
@@ -129,14 +129,14 @@ mod tests {
     fn cursor_inside_a_quoted_word_uses_utf16_offsets() {
         let request: Request = serde_json::from_value(serde_json::json!({
             "tokens": [
-                {"value":"mcdocker", "start":0, "end":8},
-                {"value":"import", "start":9, "end":15},
-                {"value":"🌲存档 old", "start":16, "end":26}
+                {"value":"chulch", "start":0, "end":6},
+                {"value":"import", "start":7, "end":13},
+                {"value":"🌲存档 old", "start":14, "end":24}
             ],
-            "cursor":20, "prefix":"'🌲存档 old'"
+            "cursor":18, "prefix":"'🌲存档 old'"
         }))
         .unwrap();
-        assert_eq!(request.words(), ["mcdocker", "import", "🌲存"]);
+        assert_eq!(request.words(), ["chulch", "import", "🌲存"]);
     }
 
     #[test]
