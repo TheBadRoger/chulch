@@ -1,21 +1,25 @@
 # chulch
 
-chulch 是一个 **Windows x64** 命令行工具，用于安装和启动 Minecraft Java 版的 Fabric、Forge 和 NeoForge 整合包，支持离线角色和微软正版账号。多个实例可以共享游戏文件，各自保留模组、配置和存档。启动时会自动匹配 Java。
+[English](docs/README.en.md)
+
+chulch 是一款面向 **Windows x64** 的第三方 Minecraft Java 版启动器和实例管理工具。它借鉴 Docker 的分层存储思路，让多个实例共享相同的游戏文件，节省磁盘空间，同时各自保留模组、配置和存档。
 
 ## 快速启动
 
-1. **安装命令行工具。** 解压 Windows x64 安装包，在含有 `install.ps1` 的目录打开 PowerShell。如果使用源码，请先准备 Rust 1.89 或更高版本。两种方式都可按[安装指南](docs/install.md)操作。
+**1. 在线安装 chulch。** 打开 PowerShell，运行以下命令。显示版本号即表示安装成功。
 
-   ```powershell
-   .\install.ps1
-   chulch --version
-   ```
+```powershell
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/TheBadRoger/chulch/main/install.ps1')))
+chulch --version
+```
 
-2. **安装并启动第一个整合包。** 将示例路径换成自己的 Modrinth `.mrpack` 或 CurseForge 导出 ZIP。`survival` 是给本次安装取的实例名。
+**2. 安装并启动整合包。** 将示例路径换成你下载的 Modrinth `.mrpack` 或 CurseForge 导出 ZIP。`survival` 是你给实例起的名字。
 
-   ```powershell
-   chulch install '.\my-pack.mrpack' --id survival
-   chulch launch survival
-   ```
+```powershell
+chulch install '.\my-pack.mrpack' --id survival
+chulch launch survival
+```
 
-自定义工作区、共享资源包和光影包、快速读档与卸载等用法见[命令参考](docs/commands.md)。
+[安装与升级](docs/install.md) · [命令参考](docs/commands.md)
+
+chulch 由社区独立开发，是非官方 Minecraft 产品。

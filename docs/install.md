@@ -1,60 +1,17 @@
-# 在 Windows 上安装 chulch
+# 安装与升级
 
-使用 **Windows x64**，在普通用户的 PowerShell 中安装。默认位置是 `%LOCALAPPDATA%\Programs\chulch\bin`。安装脚本会将这个目录加入当前终端和当前用户的 `PATH`。Java 会在首次启动游戏时按实例要求匹配。
-
-## 使用 Windows x64 安装包
-
-1. 将安装包中的文件**全部解压**到一个文件夹。
-2. 在能同时看到 `install.ps1` 和 `chulch.exe` 的目录打开 PowerShell，运行：
-
-   ```powershell
-   .\install.ps1
-   chulch --version
-   ```
-
-看到类似 `chulch 0.1.0` 的版本号就完成了安装。使用预编译包可以跳过 Rust 工具链的安装。
-
-## 从项目源码安装
-
-1. 安装 **Windows x64 Rust 1.89 或更高版本**，包含 Cargo。如使用默认 MSVC 工具链，按 rustup 提示安装 Visual Studio 的 C++ 桌面开发工具和 Windows SDK。[Rust 安装入口](https://rust-lang.org/tools/install/) · [MSVC 环境说明](https://rust-lang.github.io/rustup/installation/windows-msvc.html)
-2. 重新打开 PowerShell，进入含有 `Cargo.toml` 的项目根目录，执行：
-
-   ```powershell
-   rustc --version
-   .\install.ps1
-   chulch --version
-   ```
-
-脚本按照仓库的 `Cargo.lock` 编译发行版本，再安装到用户目录。首次构建需要下载依赖。
-
-## 自定义安装与升级
-
-从 **mcdocker** 升级后，命令名改为 `chulch`。已有工作区、公共资源设置和本机保存的微软登录信息会继续沿用。如果以前在 PowerShell 的 `$PROFILE` 注册过补全，请把那一行里的 `mcdocker` 改为 `chulch`。
-
-| 需求 | PowerShell 命令 |
-| --- | --- |
-| 将命令安装到指定目录 | `.\install.ps1 -InstallDir 'D:\Tools\chulch'` |
-| 自行管理 PATH | `.\install.ps1 -InstallDir 'D:\Tools\chulch' -NoPath` |
-| 按完整路径检查安装 | `& 'D:\Tools\chulch\chulch.exe' --version` |
-
-**升级时**，先退出正在用 chulch 启动的游戏，再从新版安装包或源码目录重新运行脚本，选择原来的安装目录。脚本会先检查新程序能否输出版本号，再替换已安装的程序。
-
-安装目录用来存放命令。游戏实例可放在另一个工作区，例如：
+在 **Windows x64** 上打开普通 PowerShell，运行以下命令即可为当前用户安装最新版 chulch。
 
 ```powershell
-chulch --workspace 'E:\minecraftgames' list
+& ([scriptblock]::Create((irm 'https://raw.githubusercontent.com/TheBadRoger/chulch/main/install.ps1')))
+chulch --version
 ```
 
-## 安装遇到问题
+- **升级**：退出正在运行的 chulch，再运行同一条安装命令。已有实例和存档可以继续使用。
+- **指定安装位置**：在安装命令末尾加上 `-InstallDir 'D:\Tools\chulch'`。加上 `-NoPath` 可自行管理命令路径。
+- **确认安装位置**：运行 `(Get-Command chulch).Source`。默认位置是 `%LOCALAPPDATA%\Programs\chulch\bin`。
+- **手动安装**：从最新版发布页下载 `chulch-windows-x64.zip`，解压后在该目录运行 `.\chulch.exe --version`。[下载 Windows 版](https://github.com/TheBadRoger/chulch/releases/latest)
 
-- **提示脚本执行被禁止**。确认下载来源后，可用以下命令仅为这次安装启动一个 PowerShell 进程。安装后可直接用完整路径验证，或重新登录 Windows 后使用 `chulch`。
+从旧版 mcdocker 升级后，用 `chulch list` 查看原有实例。若曾在 PowerShell 配置中启用补全，将那一行里的 `mcdocker` 改为 `chulch`。
 
-  ```powershell
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
-  & "$env:LOCALAPPDATA\Programs\chulch\bin\chulch.exe" --version
-  ```
-
-- **找不到命令或仍显示旧版本**。用 `Get-Command chulch -All` 查看当前终端实际找到的程序。直接执行安装脚本的 PowerShell 会立即使用新路径；其他已有窗口可能保留旧环境，重新登录 Windows 后会读取保存的用户 PATH。
-- **源码安装找不到 Cargo 或链接器**。先确认 `cargo --version` 能输出版本号。默认 MSVC 工具链还需要 C++ 桌面开发工具和 Windows SDK。也可以改用预编译包。
-
-[返回快速启动](../README.md#快速启动) · [查看命令参考](commands.md)
+[返回快速启动](../README.md#快速启动) · [命令参考](commands.md)
